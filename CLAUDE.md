@@ -46,6 +46,20 @@ As the project develops, document:
 - Data flow between major components
 - External service integrations (if any)
 
+## Context Window Statusline
+
+Two scripts live in `~/.claude/` to monitor the Claude Code context window:
+
+- `ctxstats` — prints a one-line snapshot: `MakoletDashboard | ctx: 21% used  (38k / 180k tokens)`
+- `ctxwatch` — live-updating display with a progress bar, refreshes every 3s
+
+**Usage**: Open a VS Code split terminal (drag the terminal tab or use the split icon), then run:
+```bash
+ctxwatch
+```
+
+Both aliases are defined in `~/.zshrc`.
+
 ## Important Notes for Future Development
 
 - Update this file as the architecture and structure becomes clearer

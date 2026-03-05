@@ -8,11 +8,22 @@ MakoletDashboard is a dashboard project. The codebase is in early development st
 
 ## Git & GitHub Workflow
 
+**IMPORTANT**: As you work on this project, commit and push changes to GitHub regularly. This ensures we never lose work status and have a complete history of development.
+
 - **Repository**: https://github.com/RoeiAmsalem/MakoletDashboard
 - **Main branch**: `main` (production-ready code)
-- **Commits**: Create clean, atomic commits with descriptive messages following conventional commits format (e.g., `feat:`, `fix:`, `refactor:`)
-- **Push workflow**: Push commits to GitHub after logical completion of features or fixes
+- **Commit frequency**: Make commits after completing logical units of work (features, bug fixes, refactoring). Don't wait until the end of the session.
+- **Commit messages**: Use clean, descriptive messages following conventional commits format:
+  - `feat:` for new features
+  - `fix:` for bug fixes
+  - `refactor:` for code refactoring
+  - `docs:` for documentation
+  - `test:` for test additions/changes
+  - Example: `feat: Add user authentication` or `fix: Resolve dashboard loading bug`
+- **Push to GitHub**: Push commits to GitHub after each logical completion or at natural breakpoints in work
 - **User info**: Roei Amsalem (roei_amsalem@example.com)
+
+**Workflow**: As work is completed → commit with clear message → push to GitHub → repeat
 
 ## Development Setup
 

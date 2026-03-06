@@ -124,20 +124,18 @@ class BaseAgent(ABC):
     # ------------------------------------------------------------------
 
     def _notify_failure(self, error_message: str) -> None:
-        """
-        Alert that the agent has failed.
-        Step 7 will replace this with a real WhatsApp message via CallMeBot.
-        """
-        msg = (
-            f"[ALERT] Agent '{self.name}' failed after {MAX_RETRIES} retries.\n"
-            f"Error: {error_message}"
-        )
-        # Print so it's visible in logs / terminal even before WhatsApp is wired
-        print(msg)
+        """Send a WhatsApp alert for a final agent failure."""
+        try:
+            from notifications.whatsapp import format_agent_alert, send_alert  # noqa: PLC0415
+            msg = format_agent_alert(self.name, error_message)
+        except ImportError:
+            msg = (
+                f"[ALERT] Agent '{self.name}' failed after {MAX_RETRIES} retries.\n"
+                f"Error: {error_message}"
+            )
+
         self.logger.error(msg)
 
-        # Step 7 hook — import lazily so the project works before
-        # notifications/whatsapp.py exists.
         try:
             from notifications.whatsapp import send_alert  # noqa: PLC0415
             send_alert(msg)

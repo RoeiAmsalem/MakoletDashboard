@@ -2,6 +2,9 @@
 requests>=2.32
 python-dotenv>=1.0
 
+# Email agent (Step 4)
+pdfplumber>=0.11
+
 # Dashboard (Step 5)
 flask>=3.0
 

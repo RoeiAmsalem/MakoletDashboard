@@ -6,7 +6,56 @@
     <title>עובדים - מכולת דשבורד</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
-        /* Blue accent for employees */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        /* ── Add employee panel ── */
+        .add-emp-panel {
+            background: #162032;
+            border: 1px solid rgba(59,130,246,0.3);
+            border-radius: var(--radius);
+            padding: 1.25rem 1.5rem;
+            display: none;
+            gap: 0.75rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+        .add-emp-panel.open { display: flex; }
+
+        .add-emp-panel .field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+            flex: 1;
+            min-width: 160px;
+        }
+
+        .add-emp-panel label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        .add-emp-panel input {
+            background: var(--bg);
+            border: 1px solid rgba(59,130,246,0.5);
+            border-radius: 6px;
+            padding: 0.45rem 0.65rem;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-family: inherit;
+        }
+        .add-emp-panel input:focus { outline: none; border-color: #93c5fd; }
+
+        .panel-actions { display: flex; gap: 0.5rem; padding-bottom: 0.05rem; }
+
+        /* ── Employee cards grid ── */
         .employee-cards {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -22,9 +71,22 @@
             display: flex;
             flex-direction: column;
             gap: 1rem;
+            transition: opacity 0.25s, filter 0.25s;
+        }
+
+        .employee-card.inactive {
+            opacity: 0.45;
+            filter: grayscale(0.7);
         }
 
         .employee-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+        }
+
+        .emp-header-left {
             display: flex;
             align-items: center;
             gap: 0.75rem;
@@ -48,6 +110,30 @@
             color: var(--text-light);
         }
 
+        /* Card action buttons (top-right) */
+        .card-actions {
+            display: flex;
+            gap: 0.25rem;
+        }
+
+        .btn-card-action {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 0.85rem;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            color: rgba(241,245,249,0.5);
+            font-family: inherit;
+            transition: background 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+        .btn-card-action:hover { background: rgba(255,255,255,0.1); color: var(--text-light); }
+        .btn-card-action.deactivate:hover { background: rgba(250,204,21,0.15); color: #fde68a; }
+        .btn-card-action.activate:hover   { background: rgba(34,197,94,0.15);  color: #86efac; }
+        .btn-card-action.del:hover        { background: rgba(239,68,68,0.15);  color: #fca5a5; }
+
+        /* Fields */
         .field-row {
             display: flex;
             flex-direction: column;
@@ -75,11 +161,8 @@
             width: 100%;
             transition: border-color 0.15s;
         }
-
-        .field-input:focus {
-            outline: none;
-            border-color: #93c5fd;
-        }
+        .field-input:focus { outline: none; border-color: #93c5fd; }
+        .field-input:disabled { opacity: 0.4; cursor: not-allowed; }
 
         .card-footer {
             display: flex;
@@ -101,30 +184,26 @@
             cursor: pointer;
             transition: background 0.15s;
         }
-
-        .btn-save-card:hover { background: rgba(59,130,246,0.4); }
+        .btn-save-card:hover    { background: rgba(59,130,246,0.4); }
         .btn-save-card:disabled { opacity: 0.5; cursor: default; }
 
         .finalized-badge {
-            font-size: 0.72rem;
-            font-weight: 700;
-            padding: 0.2rem 0.6rem;
-            border-radius: 999px;
-            background: rgba(34,197,94,0.2);
-            color: #86efac;
+            font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.6rem;
+            border-radius: 999px; white-space: nowrap;
+            background: rgba(34,197,94,0.2); color: #86efac;
             border: 1px solid rgba(34,197,94,0.3);
-            white-space: nowrap;
         }
-
         .unfinalized-badge {
-            font-size: 0.72rem;
-            font-weight: 700;
-            padding: 0.2rem 0.6rem;
-            border-radius: 999px;
-            background: rgba(250,204,21,0.15);
-            color: #fde68a;
+            font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.6rem;
+            border-radius: 999px; white-space: nowrap;
+            background: rgba(250,204,21,0.15); color: #fde68a;
             border: 1px solid rgba(250,204,21,0.3);
-            white-space: nowrap;
+        }
+        .inactive-badge {
+            font-size: 0.72rem; font-weight: 700; padding: 0.2rem 0.6rem;
+            border-radius: 999px; white-space: nowrap;
+            background: rgba(100,116,139,0.2); color: #94a3b8;
+            border: 1px solid rgba(100,116,139,0.3);
         }
 
         .save-msg {
@@ -134,11 +213,44 @@
             min-height: 1.1rem;
         }
 
-        /* Summary KPI */
+        /* KPI summary */
         .summary-bar {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 1rem;
+        }
+
+        /* Shared add/save buttons */
+        .btn-add-main {
+            font-size: 0.82rem;
+            font-weight: 700;
+            padding: 0.4rem 0.85rem;
+            background: rgba(59,130,246,0.15);
+            border: 1px solid rgba(59,130,246,0.45);
+            border-radius: 6px;
+            color: #93c5fd;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s;
+            white-space: nowrap;
+        }
+        .btn-add-main:hover { background: rgba(59,130,246,0.3); }
+
+        .btn-save-inline {
+            font-size: 0.78rem; font-weight: 700;
+            padding: 0.3rem 0.65rem;
+            background: rgba(59,130,246,0.15);
+            border: 1px solid rgba(59,130,246,0.4);
+            border-radius: 6px; color: #93c5fd;
+            cursor: pointer; font-family: inherit;
+        }
+        .btn-save-inline:hover { background: rgba(59,130,246,0.3); }
+
+        .btn-cancel-inline {
+            font-size: 0.78rem; padding: 0.3rem 0.5rem;
+            background: none; border: 1px solid #334155;
+            border-radius: 6px; color: var(--text-secondary);
+            cursor: pointer; font-family: inherit;
         }
 
         @media (max-width: 600px) {
@@ -176,22 +288,38 @@
 
 <main class="main-content">
 
-    <!-- Summary KPIs -->
+    <!-- KPI summary -->
     <section class="summary-bar" id="kpi-section">
-        <div class="loading">
-            <div class="spinner"></div>
-            <span>טוען...</span>
-        </div>
+        <div class="loading"><div class="spinner"></div><span>טוען...</span></div>
     </section>
 
-    <!-- Employee Cards -->
+    <!-- Employees section -->
     <section>
-        <h2 class="section-title">👷 עובדים פעילים – <span id="month-label"></span></h2>
-        <div class="employee-cards" id="employee-cards">
-            <div class="loading">
-                <div class="spinner"></div>
-                <span>טוען עובדים...</span>
+        <div class="section-header">
+            <h2 class="section-title" style="margin-bottom:0">
+                👷 עובדים – <span id="month-label"></span>
+            </h2>
+            <button class="btn-add-main" onclick="toggleAddPanel()">+ הוסף עובד</button>
+        </div>
+
+        <!-- Add employee panel -->
+        <div class="add-emp-panel" id="add-emp-panel">
+            <div class="field">
+                <label for="new-name">שם העובד</label>
+                <input id="new-name" type="text" placeholder="שם מלא" maxlength="80">
             </div>
+            <div class="field">
+                <label for="new-rate">תעריף לשעה (₪)</label>
+                <input id="new-rate" type="number" min="0" step="0.5" placeholder="0" style="direction:ltr">
+            </div>
+            <div class="panel-actions">
+                <button class="btn-save-inline" onclick="saveNewEmployee()">✓ שמור</button>
+                <button class="btn-cancel-inline" onclick="toggleAddPanel()">ביטול</button>
+            </div>
+        </div>
+
+        <div class="employee-cards" id="employee-cards">
+            <div class="loading"><div class="spinner"></div><span>טוען עובדים...</span></div>
         </div>
     </section>
 
@@ -205,6 +333,8 @@ const monthStr = new Date().toLocaleDateString('he-IL', { month: 'long', year: '
 document.getElementById('current-month').textContent = monthStr;
 document.getElementById('month-label').textContent   = monthStr;
 
+let allEmployees = [];
+
 // ── Load ───────────────────────────────────────────────────────
 async function loadEmployees() {
     const kpi     = document.getElementById('kpi-section');
@@ -212,9 +342,9 @@ async function loadEmployees() {
     try {
         const res = await fetch('/api/employees');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const employees = await res.json();
-        renderKpis(kpi, employees);
-        renderCards(cardsEl, employees);
+        allEmployees = await res.json();
+        renderKpis(kpi, allEmployees);
+        renderCards(cardsEl, allEmployees);
     } catch (err) {
         console.error(err);
         kpi.innerHTML     = '<p class="error-msg">שגיאה בטעינת נתונים.</p>';
@@ -223,11 +353,10 @@ async function loadEmployees() {
 }
 
 function renderKpis(section, employees) {
-    const totalSalary = employees.reduce((s, e) => {
-        if (e.hours_worked != null) return s + e.hours_worked * e.hourly_rate;
-        return s;
-    }, 0);
-    const finalized = employees.filter(e => e.is_finalized).length;
+    const active       = employees.filter(e => e.is_active);
+    const totalSalary  = active.reduce((s, e) =>
+        s + (e.hours_worked != null ? e.hours_worked * e.hourly_rate : 0), 0);
+    const finalized    = active.filter(e => e.is_finalized).length;
 
     section.innerHTML = `
         <div class="kpi-card kpi-card--salary">
@@ -236,71 +365,150 @@ function renderKpis(section, employees) {
                 <span class="kpi-label">עלות שכר חודשית</span>
             </div>
             <span class="kpi-value salary">${formatMoney(totalSalary)}</span>
+            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">${active.length} עובדים פעילים</span>
         </div>
         <div class="kpi-card kpi-card--salary">
             <div class="kpi-header">
                 <span class="kpi-icon">✅</span>
-                <span class="kpi-label">עובדים עם שעות סופיות</span>
+                <span class="kpi-label">שעות סופיות</span>
             </div>
-            <span class="kpi-value salary">${finalized} / ${employees.length}</span>
-        </div>
-    `;
+            <span class="kpi-value salary">${finalized} / ${active.length}</span>
+        </div>`;
 }
 
 function renderCards(container, employees) {
     if (!employees.length) {
-        container.innerHTML = '<p style="color:var(--text-muted);padding:2rem;text-align:center">אין עובדים פעילים</p>';
+        container.innerHTML = '<p style="color:var(--text-muted);padding:2rem;text-align:center">אין עובדים. לחץ "+ הוסף עובד" כדי להוסיף.</p>';
         return;
     }
     container.innerHTML = employees.map(e => {
-        const badge = e.is_finalized
-            ? '<span class="finalized-badge">סופי ✓</span>'
-            : '<span class="unfinalized-badge">טרם הוזן</span>';
+        const badge = !e.is_active
+            ? '<span class="inactive-badge">לא פעיל</span>'
+            : e.is_finalized
+                ? '<span class="finalized-badge">סופי ✓</span>'
+                : '<span class="unfinalized-badge">טרם הוזן</span>';
+
+        const toggleLabel = e.is_active ? '⏸ השבת' : '▶ הפעל';
+        const toggleClass = e.is_active ? 'deactivate' : 'activate';
+
         return `
-        <div class="employee-card" id="card-${e.id}">
+        <div class="employee-card${e.is_active ? '' : ' inactive'}" id="card-${e.id}">
             <div class="employee-card-header">
-                <div class="employee-avatar">👤</div>
-                <div>
+                <div class="emp-header-left">
+                    <div class="employee-avatar">👤</div>
                     <div class="employee-name">${e.name}</div>
+                </div>
+                <div class="card-actions">
+                    <button class="btn-card-action ${toggleClass}"
+                        onclick="toggleActive(${e.id})" title="${toggleLabel}">${toggleLabel}</button>
+                    <button class="btn-card-action del"
+                        onclick="deleteEmployee(${e.id})" title="מחק">🗑️</button>
                 </div>
             </div>
 
             <div class="field-row">
                 <span class="field-label">תעריף לשעה (₪)</span>
-                <input
-                    class="field-input"
-                    id="rate-${e.id}"
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value="${e.hourly_rate}"
+                <input class="field-input" id="rate-${e.id}" type="number"
+                    min="0" step="0.5" value="${e.hourly_rate}"
                     placeholder="תעריף לשעה"
-                >
+                    ${e.is_active ? '' : 'disabled'}>
             </div>
 
             <div class="field-row">
                 <span class="field-label">שעות חודש זה</span>
-                <input
-                    class="field-input"
-                    id="hours-${e.id}"
-                    type="number"
-                    min="0"
-                    step="0.25"
+                <input class="field-input" id="hours-${e.id}" type="number"
+                    min="0" step="0.25"
                     value="${e.hours_worked != null ? e.hours_worked : ''}"
                     placeholder="הזן שעות עבודה"
-                >
+                    ${e.is_active ? '' : 'disabled'}>
             </div>
 
             <div class="card-footer">
-                <button class="btn-save-card" id="save-btn-${e.id}" onclick="saveEmployee(${e.id})">
+                <button class="btn-save-card" id="save-btn-${e.id}"
+                    onclick="saveEmployee(${e.id})"
+                    ${e.is_active ? '' : 'disabled'}>
                     שמור
                 </button>
                 <span id="badge-${e.id}">${badge}</span>
             </div>
             <div class="save-msg" id="msg-${e.id}"></div>
-        </div>
-        `;
+        </div>`;
     }).join('');
+}
+
+// ── Add panel ─────────────────────────────────────────────────
+function toggleAddPanel() {
+    const panel = document.getElementById('add-emp-panel');
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open'))
+        document.getElementById('new-name').focus();
+}
+
+async function saveNewEmployee() {
+    const nameInput = document.getElementById('new-name');
+    const rateInput = document.getElementById('new-rate');
+    const name        = nameInput.value.trim();
+    const hourly_rate = parseFloat(rateInput.value) || 0;
+
+    if (!name) { nameInput.focus(); return; }
+
+    try {
+        const res = await fetch('/api/employees', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ name, hourly_rate }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { id } = await res.json();
+
+        allEmployees.push({
+            id, name, hourly_rate, is_active: true,
+            hours_worked: null, is_finalized: false,
+        });
+        renderCards(document.getElementById('employee-cards'), allEmployees);
+        renderKpis(document.getElementById('kpi-section'), allEmployees);
+
+        nameInput.value = '';
+        rateInput.value = '';
+        document.getElementById('add-emp-panel').classList.remove('open');
+    } catch (err) {
+        console.error(err);
+        alert('שגיאה בהוספת עובד.');
+    }
+}
+
+// ── Delete ────────────────────────────────────────────────────
+async function deleteEmployee(id) {
+    const emp = allEmployees.find(e => e.id === id);
+    if (!confirm(`למחוק את "${emp.name}" לצמיתות?`)) return;
+
+    try {
+        const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        allEmployees = allEmployees.filter(e => e.id !== id);
+        renderCards(document.getElementById('employee-cards'), allEmployees);
+        renderKpis(document.getElementById('kpi-section'), allEmployees);
+    } catch (err) {
+        console.error(err);
+        alert('שגיאה במחיקה.');
+    }
+}
+
+// ── Toggle active ──────────────────────────────────────────────
+async function toggleActive(id) {
+    try {
+        const res = await fetch(`/api/employees/${id}/toggle`, { method: 'POST' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const { is_active } = await res.json();
+
+        const emp = allEmployees.find(e => e.id === id);
+        emp.is_active = is_active;
+        renderCards(document.getElementById('employee-cards'), allEmployees);
+        renderKpis(document.getElementById('kpi-section'), allEmployees);
+    } catch (err) {
+        console.error(err);
+        alert('שגיאה בשינוי סטטוס.');
+    }
 }
 
 // ── Save employee ──────────────────────────────────────────────
@@ -314,20 +522,16 @@ async function saveEmployee(id) {
     const hourly_rate  = parseFloat(rateInput.value);
     const hours_worked = hoursInput.value !== '' ? parseFloat(hoursInput.value) : null;
 
-    if (isNaN(hourly_rate) || hourly_rate < 0) {
-        rateInput.focus();
-        return;
-    }
+    if (isNaN(hourly_rate) || hourly_rate < 0) { rateInput.focus(); return; }
 
     btn.disabled    = true;
     btn.textContent = 'שומר...';
     msgEl.textContent = '';
+    msgEl.style.color = '#86efac';
 
     try {
         const body = { hourly_rate };
-        if (hours_worked !== null && !isNaN(hours_worked)) {
-            body.hours_worked = hours_worked;
-        }
+        if (hours_worked !== null && !isNaN(hours_worked)) body.hours_worked = hours_worked;
 
         const res = await fetch(`/api/employees/${id}`, {
             method:  'PUT',
@@ -336,11 +540,16 @@ async function saveEmployee(id) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        // Update badge if hours were saved
+        // Update local state
+        const emp = allEmployees.find(e => e.id === id);
+        emp.hourly_rate = hourly_rate;
         if (body.hours_worked != null) {
+            emp.hours_worked  = body.hours_worked;
+            emp.is_finalized  = true;
             badgeEl.innerHTML = '<span class="finalized-badge">סופי ✓</span>';
         }
 
+        renderKpis(document.getElementById('kpi-section'), allEmployees);
         msgEl.textContent = 'נשמר בהצלחה ✓';
         setTimeout(() => { msgEl.textContent = ''; }, 3000);
     } catch (err) {

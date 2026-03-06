@@ -30,13 +30,37 @@ def get_connection() -> sqlite3.Connection:
 def init_db(seed: bool = False):
     """
     Create all tables.
-    If seed=True, insert one sample row per table (for testing/dev).
+    Always seeds default fixed expenses if the table is empty.
+    If seed=True, also insert one sample row per table (for testing/dev).
     """
     conn = get_connection()
     create_tables(conn)
+    _seed_default_fixed_expenses(conn)
     if seed:
         _seed_sample_data(conn)
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Default data seeding
+# ---------------------------------------------------------------------------
+
+def _seed_default_fixed_expenses(conn: sqlite3.Connection):
+    """Insert default expense categories if the fixed_expenses table is empty."""
+    count = conn.execute("SELECT COUNT(*) FROM fixed_expenses").fetchone()[0]
+    if count > 0:
+        return
+    today = date.today().isoformat()
+    defaults = [
+        ("rent",   0.0, today, "שכירות"),
+        ("arnona", 0.0, today, "ארנונה"),
+    ]
+    for category, amount, valid_from, notes in defaults:
+        conn.execute(
+            "INSERT INTO fixed_expenses (category, amount, valid_from, notes) VALUES (?, ?, ?, ?)",
+            (category, amount, valid_from, notes),
+        )
+    conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +222,37 @@ def deactivate_employee(employee_id: int):
         )
 
 
+def get_all_employees() -> list[sqlite3.Row]:
+    """Return all employees (active first, then inactive), ordered by name."""
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM employees ORDER BY is_active DESC, name"
+        ).fetchall()
+
+
+def toggle_employee_active(employee_id: int) -> bool:
+    """Flip is_active for the employee. Returns the new state as bool."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT is_active FROM employees WHERE id = ?", (employee_id,)
+        ).fetchone()
+        if not row:
+            raise ValueError(f"Employee {employee_id} not found")
+        new_state = 0 if row["is_active"] else 1
+        conn.execute(
+            "UPDATE employees SET is_active = ? WHERE id = ?",
+            (new_state, employee_id),
+        )
+    return bool(new_state)
+
+
+def delete_employee(employee_id: int) -> None:
+    """Hard-delete an employee and all their hours records."""
+    with get_connection() as conn:
+        conn.execute("DELETE FROM employee_hours WHERE employee_id = ?", (employee_id,))
+        conn.execute("DELETE FROM employees WHERE id = ?", (employee_id,))
+
+
 # ---------------------------------------------------------------------------
 # employee_hours
 # ---------------------------------------------------------------------------
@@ -293,6 +348,20 @@ def update_fixed_expense_amount(expense_id: int, amount: float) -> None:
             "UPDATE fixed_expenses SET amount = ? WHERE id = ?",
             (amount, expense_id),
         )
+
+
+def insert_fixed_expense(category: str, amount: float) -> int:
+    """Insert a new fixed expense with valid_from = today. Returns new row id."""
+    return upsert_fixed_expense(
+        category=category,
+        amount=amount,
+        valid_from=date.today().isoformat(),
+    )
+
+
+def delete_fixed_expense(expense_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM fixed_expenses WHERE id = ?", (expense_id,))
 
 
 # ---------------------------------------------------------------------------

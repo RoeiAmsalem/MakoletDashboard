@@ -45,10 +45,15 @@ from dotenv import load_dotenv
 
 from database.db import (
     calculate_estimated_profit,
-    get_active_employees,
+    delete_employee,
+    delete_fixed_expense,
+    get_all_employees,
     get_all_fixed_expenses,
     get_employee_hours,
     init_db,
+    insert_employee,
+    insert_fixed_expense,
+    toggle_employee_active,
     update_employee_rate,
     update_fixed_expense_amount,
     upsert_employee_hours,
@@ -179,6 +184,18 @@ def api_fixed_expenses_list():
     return jsonify([dict(r) for r in rows])
 
 
+@app.route("/api/fixed-expenses", methods=["POST"])
+@login_required
+def api_fixed_expenses_create():
+    body     = request.get_json(force=True)
+    category = (body.get("category") or "").strip()
+    amount   = body.get("amount", 0)
+    if not category:
+        return jsonify({"error": "category required"}), 400
+    new_id = insert_fixed_expense(category, float(amount))
+    return jsonify({"ok": True, "id": new_id}), 201
+
+
 @app.route("/api/fixed-expenses/<int:expense_id>", methods=["PUT"])
 @login_required
 def api_fixed_expenses_update(expense_id: int):
@@ -190,11 +207,18 @@ def api_fixed_expenses_update(expense_id: int):
     return jsonify({"ok": True, "id": expense_id, "amount": float(amount)})
 
 
+@app.route("/api/fixed-expenses/<int:expense_id>", methods=["DELETE"])
+@login_required
+def api_fixed_expenses_delete(expense_id: int):
+    delete_fixed_expense(expense_id)
+    return jsonify({"ok": True})
+
+
 @app.route("/api/employees", methods=["GET"])
 @login_required
 def api_employees_list():
     today = date.today()
-    employees = get_active_employees()
+    employees  = get_all_employees()
     hours_rows = get_employee_hours(today.month, today.year)
     hours_by_emp = {r["employee_id"]: r for r in hours_rows}
 
@@ -205,11 +229,41 @@ def api_employees_list():
             "id":           emp["id"],
             "name":         emp["name"],
             "hourly_rate":  emp["hourly_rate"],
+            "is_active":    bool(emp["is_active"]),
             "hours_worked": h["hours_worked"] if h else None,
             "is_finalized": bool(h["is_finalized"]) if h else False,
             "hours_row_id": h["id"] if h else None,
         })
     return jsonify(result)
+
+
+@app.route("/api/employees", methods=["POST"])
+@login_required
+def api_employees_create():
+    body        = request.get_json(force=True)
+    name        = (body.get("name") or "").strip()
+    hourly_rate = body.get("hourly_rate", 0)
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    new_id = insert_employee(name, float(hourly_rate))
+    return jsonify({"ok": True, "id": new_id}), 201
+
+
+@app.route("/api/employees/<int:employee_id>", methods=["DELETE"])
+@login_required
+def api_employees_delete(employee_id: int):
+    delete_employee(employee_id)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/employees/<int:employee_id>/toggle", methods=["POST"])
+@login_required
+def api_employees_toggle(employee_id: int):
+    try:
+        new_state = toggle_employee_active(employee_id)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 404
+    return jsonify({"ok": True, "is_active": new_state})
 
 
 @app.route("/api/employees/<int:employee_id>", methods=["PUT"])

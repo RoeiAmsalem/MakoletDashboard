@@ -1,0 +1,12 @@
+# Core
+requests>=2.32
+python-dotenv>=1.0
+
+# Dashboard (Step 5)
+flask>=3.0
+
+# Scheduling (Step 8)
+apscheduler>=3.10
+
+# Scraping (Step 9)
+playwright>=1.44

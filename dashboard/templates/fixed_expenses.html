@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>הוצאות קבועות - מכולת דשבורד</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Purple accent override for this page */
+        .page-accent { color: #818cf8; }
+
+        .table-card {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;      /* clip thead bg */
+        }
+
+        .table-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        .table-header h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .data-table thead th {
+            background: #162032;
+        }
+
+        /* Inline edit */
+        .amount-display { cursor: default; }
+
+        .amount-input {
+            width: 110px;
+            background: var(--bg);
+            border: 1px solid #818cf8;
+            border-radius: 6px;
+            padding: 0.3rem 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            font-family: inherit;
+            text-align: left;
+            direction: ltr;
+        }
+
+        .amount-input:focus { outline: none; border-color: #a5b4fc; }
+
+        .btn-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            padding: 0.25rem 0.4rem;
+            border-radius: 4px;
+            transition: background 0.15s;
+            color: var(--text-secondary);
+        }
+        .btn-icon:hover { background: rgba(255,255,255,0.06); }
+
+        .btn-save-inline {
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 0.3rem 0.65rem;
+            background: rgba(129,140,248,0.15);
+            border: 1px solid rgba(129,140,248,0.4);
+            border-radius: 6px;
+            color: #c7d2fe;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s;
+        }
+        .btn-save-inline:hover { background: rgba(129,140,248,0.28); }
+
+        .btn-cancel-inline {
+            font-size: 0.78rem;
+            padding: 0.3rem 0.5rem;
+            background: none;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s;
+        }
+        .btn-cancel-inline:hover { background: rgba(255,255,255,0.04); }
+
+        .actions-cell { display: flex; gap: 0.4rem; align-items: center; white-space: nowrap; }
+
+        tfoot td {
+            font-weight: 700;
+            color: #c7d2fe;
+            background: #1a1d35 !important;
+            border-top: 2px solid rgba(129,140,248,0.3) !important;
+            padding: 0.8rem 0.75rem;
+        }
+
+        .saved-flash {
+            font-size: 0.75rem;
+            color: #86efac;
+            margin-right: 0.4rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="navbar-brand">
+        <span class="store-name">🏪 מכולת</span>
+        <span class="page-title">הוצאות קבועות</span>
+    </div>
+    <nav>
+        <ul class="navbar-nav">
+            <li><a href="/">בית</a></li>
+            <li><a href="/fixed-expenses" class="active">הוצאות קבועות</a></li>
+            <li><a href="/employees">עובדים</a></li>
+        </ul>
+    </nav>
+    <div class="navbar-end">
+        <span id="current-month" class="navbar-meta"></span>
+        <span class="navbar-user">
+            {{ current_user.username }}
+            {% if current_user.is_admin %}
+            <span class="role-badge admin">מנהל</span>
+            {% else %}
+            <span class="role-badge viewer">צופה</span>
+            {% endif %}
+        </span>
+        <a href="{{ url_for('logout') }}" class="btn-logout">יציאה</a>
+    </div>
+</nav>
+
+<main class="main-content">
+
+    <!-- Summary KPI -->
+    <section class="cards-grid" id="kpi-section">
+        <div class="loading">
+            <div class="spinner"></div>
+            <span>טוען...</span>
+        </div>
+    </section>
+
+    <!-- Table -->
+    <div class="table-card">
+        <div class="table-header">
+            <h2><span class="page-accent">🏠</span> רשימת הוצאות קבועות</h2>
+            <span id="header-total" style="font-size:0.9rem;color:var(--text-secondary)"></span>
+        </div>
+
+        <div style="overflow-x:auto">
+            <table class="data-table" id="expenses-table">
+                <thead>
+                    <tr>
+                        <th>קטגוריה</th>
+                        <th>סכום חודשי</th>
+                        <th>בתוקף מ-</th>
+                        <th>הערות</th>
+                        <th>עריכה</th>
+                    </tr>
+                </thead>
+                <tbody id="expenses-tbody">
+                    <tr><td colspan="5">
+                        <div class="loading"><div class="spinner"></div><span>טוען...</span></div>
+                    </td></tr>
+                </tbody>
+                <tfoot id="expenses-tfoot"></tfoot>
+            </table>
+        </div>
+    </div>
+
+</main>
+
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+'use strict';
+
+document.getElementById('current-month').textContent =
+    new Date().toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+
+const CATEGORY_HE = {
+    rent:        'שכירות',
+    arnona:      'ארנונה',
+    electricity: 'חשמל',
+    insurance:   'ביטוח',
+    internet:    'אינטרנט',
+    salary:      'שכר',
+    vat:         'מע"מ',
+    goods:       'סחורה',
+};
+
+function catLabel(cat) {
+    return CATEGORY_HE[cat] || cat;
+}
+
+// ── State ──────────────────────────────────────────────────────
+let allExpenses = [];
+
+// ── Load ───────────────────────────────────────────────────────
+async function loadExpenses() {
+    const kpi    = document.getElementById('kpi-section');
+    const tbody  = document.getElementById('expenses-tbody');
+    try {
+        const res = await fetch('/api/fixed-expenses');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        allExpenses = await res.json();
+        renderKpi(kpi, allExpenses);
+        renderTable(tbody, allExpenses);
+    } catch (err) {
+        console.error(err);
+        kpi.innerHTML   = '<p class="error-msg">שגיאה בטעינת נתונים.</p>';
+        tbody.innerHTML = '<tr><td colspan="5"><p class="error-msg">שגיאה בטעינת נתונים.</p></td></tr>';
+    }
+}
+
+function renderKpi(section, expenses) {
+    const total = expenses.reduce((s, e) => s + e.amount, 0);
+    section.innerHTML = `
+        <div class="kpi-card kpi-card--fixed">
+            <div class="kpi-header">
+                <span class="kpi-icon">🏠</span>
+                <span class="kpi-label">סה"כ הוצאות קבועות</span>
+            </div>
+            <span class="kpi-value fixed">${formatMoney(total)}</span>
+            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">${expenses.length} רשומות</span>
+        </div>
+    `;
+}
+
+function renderTable(tbody, expenses) {
+    if (!expenses.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">אין הוצאות קבועות מוגדרות</td></tr>';
+        updateTotals(expenses);
+        return;
+    }
+    tbody.innerHTML = expenses.map(e => `
+        <tr id="row-${e.id}">
+            <td>${catLabel(e.category)}</td>
+            <td class="money fixed" id="amount-cell-${e.id}">
+                <span class="amount-display" id="display-${e.id}">${formatMoney(e.amount)}</span>
+                <input
+                    class="amount-input"
+                    id="input-${e.id}"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value="${e.amount}"
+                    style="display:none"
+                >
+            </td>
+            <td style="color:var(--text-secondary);font-size:0.85rem">${e.valid_from || ''}</td>
+            <td style="color:var(--text-secondary);font-size:0.85rem">${e.notes || ''}</td>
+            <td>
+                <div class="actions-cell" id="actions-${e.id}">
+                    <button class="btn-icon" onclick="startEdit(${e.id})" id="btn-edit-${e.id}" title="ערוך">✏️</button>
+                    <button class="btn-save-inline" onclick="saveEdit(${e.id})" id="btn-save-${e.id}" style="display:none">✓ שמור</button>
+                    <button class="btn-cancel-inline" onclick="cancelEdit(${e.id})" id="btn-cancel-${e.id}" style="display:none">✗</button>
+                    <span class="saved-flash" id="flash-${e.id}">נשמר ✓</span>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+    updateTotals(expenses);
+}
+
+function updateTotals(expenses) {
+    const total  = expenses.reduce((s, e) => s + e.amount, 0);
+    const tfoot  = document.getElementById('expenses-tfoot');
+    const header = document.getElementById('header-total');
+    tfoot.innerHTML = `
+        <tr>
+            <td>סה"כ</td>
+            <td class="money" style="color:#c7d2fe">${formatMoney(total)}</td>
+            <td colspan="3"></td>
+        </tr>
+    `;
+    header.textContent = `סה"כ: ${formatMoney(total)}`;
+}
+
+// ── Inline edit ────────────────────────────────────────────────
+function startEdit(id) {
+    document.getElementById(`display-${id}`).style.display   = 'none';
+    document.getElementById(`input-${id}`).style.display     = '';
+    document.getElementById(`btn-edit-${id}`).style.display  = 'none';
+    document.getElementById(`btn-save-${id}`).style.display  = '';
+    document.getElementById(`btn-cancel-${id}`).style.display = '';
+    document.getElementById(`input-${id}`).focus();
+}
+
+function cancelEdit(id) {
+    const exp = allExpenses.find(e => e.id === id);
+    document.getElementById(`input-${id}`).value              = exp.amount;
+    document.getElementById(`display-${id}`).style.display    = '';
+    document.getElementById(`input-${id}`).style.display      = 'none';
+    document.getElementById(`btn-edit-${id}`).style.display   = '';
+    document.getElementById(`btn-save-${id}`).style.display   = 'none';
+    document.getElementById(`btn-cancel-${id}`).style.display = 'none';
+}
+
+async function saveEdit(id) {
+    const input  = document.getElementById(`input-${id}`);
+    const amount = parseFloat(input.value);
+    if (isNaN(amount) || amount < 0) { input.focus(); return; }
+
+    try {
+        const res = await fetch(`/api/fixed-expenses/${id}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ amount }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        // Update local state
+        const exp = allExpenses.find(e => e.id === id);
+        exp.amount = amount;
+
+        // Update display
+        document.getElementById(`display-${id}`).textContent = formatMoney(amount);
+        cancelEdit(id);
+        updateTotals(allExpenses);
+
+        // Flash confirmation
+        const flash = document.getElementById(`flash-${id}`);
+        flash.style.opacity = '1';
+        setTimeout(() => { flash.style.opacity = '0'; }, 2000);
+    } catch (err) {
+        console.error(err);
+        alert('שגיאה בשמירה. נסה שוב.');
+    }
+}
+
+// ── Boot ───────────────────────────────────────────────────────
+loadExpenses();
+</script>
+</body>
+</html>

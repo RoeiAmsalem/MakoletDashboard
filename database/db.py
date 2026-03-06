@@ -279,6 +279,22 @@ def get_total_fixed_expenses(as_of_date: str = None) -> float:
     return sum(row["amount"] for row in rows)
 
 
+def get_all_fixed_expenses() -> list[sqlite3.Row]:
+    """Return all fixed expense rows regardless of validity dates."""
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM fixed_expenses ORDER BY category"
+        ).fetchall()
+
+
+def update_fixed_expense_amount(expense_id: int, amount: float) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE fixed_expenses SET amount = ? WHERE id = ?",
+            (amount, expense_id),
+        )
+
+
 # ---------------------------------------------------------------------------
 # agent_logs
 # ---------------------------------------------------------------------------

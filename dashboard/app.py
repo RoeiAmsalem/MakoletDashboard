@@ -2,12 +2,18 @@
 Flask dashboard server for MakoletDashboard.
 
 Routes:
-    GET  /login          → login page
-    POST /login          → authenticate
-    GET  /logout         → log out + redirect to /login
-    GET  /               → home page (מסך בית - estimated profit)
-    GET  /api/summary    → current month KPIs + estimated profit
-    GET  /api/history    → last 6 months profit breakdown
+    GET  /login                    → login page
+    POST /login                    → authenticate
+    GET  /logout                   → log out + redirect to /login
+    GET  /                         → home page (מסך בית - estimated profit)
+    GET  /fixed-expenses           → fixed expenses management
+    GET  /employees                → employees & monthly hours
+    GET  /api/summary              → current month KPIs + estimated profit
+    GET  /api/history              → last 6 months profit breakdown
+    GET  /api/fixed-expenses       → all fixed expenses
+    PUT  /api/fixed-expenses/<id>  → update expense amount
+    GET  /api/employees            → all employees with current-month hours
+    PUT  /api/employees/<id>       → update hourly rate + upsert monthly hours
 
 Roles:
     admin  → full access, edit buttons visible
@@ -15,6 +21,14 @@ Roles:
 """
 
 import os
+import sys
+
+# Ensure project root is on sys.path regardless of where Python is invoked from.
+# __file__ is always dashboard/app.py, so two dirnames up is the project root.
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, _PROJECT_ROOT)
+
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
@@ -29,7 +43,16 @@ from flask_login import (
 )
 from dotenv import load_dotenv
 
-from database.db import calculate_estimated_profit, init_db
+from database.db import (
+    calculate_estimated_profit,
+    get_active_employees,
+    get_all_fixed_expenses,
+    get_employee_hours,
+    init_db,
+    update_employee_rate,
+    update_fixed_expense_amount,
+    upsert_employee_hours,
+)
 
 load_dotenv()
 
@@ -124,6 +147,18 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/fixed-expenses")
+@login_required
+def fixed_expenses():
+    return render_template("fixed_expenses.html")
+
+
+@app.route("/employees")
+@login_required
+def employees():
+    return render_template("employees.html")
+
+
 # ---------------------------------------------------------------------------
 # API routes
 # ---------------------------------------------------------------------------
@@ -135,6 +170,69 @@ def api_summary():
     today = date.today()
     data = calculate_estimated_profit(today.month, today.year)
     return jsonify(data)
+
+
+@app.route("/api/fixed-expenses", methods=["GET"])
+@login_required
+def api_fixed_expenses_list():
+    rows = get_all_fixed_expenses()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/fixed-expenses/<int:expense_id>", methods=["PUT"])
+@login_required
+def api_fixed_expenses_update(expense_id: int):
+    body = request.get_json(force=True)
+    amount = body.get("amount")
+    if amount is None or not isinstance(amount, (int, float)):
+        return jsonify({"error": "amount required"}), 400
+    update_fixed_expense_amount(expense_id, float(amount))
+    return jsonify({"ok": True, "id": expense_id, "amount": float(amount)})
+
+
+@app.route("/api/employees", methods=["GET"])
+@login_required
+def api_employees_list():
+    today = date.today()
+    employees = get_active_employees()
+    hours_rows = get_employee_hours(today.month, today.year)
+    hours_by_emp = {r["employee_id"]: r for r in hours_rows}
+
+    result = []
+    for emp in employees:
+        h = hours_by_emp.get(emp["id"])
+        result.append({
+            "id":           emp["id"],
+            "name":         emp["name"],
+            "hourly_rate":  emp["hourly_rate"],
+            "hours_worked": h["hours_worked"] if h else None,
+            "is_finalized": bool(h["is_finalized"]) if h else False,
+            "hours_row_id": h["id"] if h else None,
+        })
+    return jsonify(result)
+
+
+@app.route("/api/employees/<int:employee_id>", methods=["PUT"])
+@login_required
+def api_employees_update(employee_id: int):
+    body = request.get_json(force=True)
+    hourly_rate  = body.get("hourly_rate")
+    hours_worked = body.get("hours_worked")
+
+    if hourly_rate is not None:
+        update_employee_rate(employee_id, float(hourly_rate))
+
+    if hours_worked is not None:
+        today = date.today()
+        upsert_employee_hours(
+            employee_id=employee_id,
+            month=today.month,
+            year=today.year,
+            hours_worked=float(hours_worked),
+            is_finalized=True,
+        )
+
+    return jsonify({"ok": True})
 
 
 @app.route("/api/history")

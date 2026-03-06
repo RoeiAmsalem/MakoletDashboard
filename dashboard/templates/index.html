@@ -5,37 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מסך בית - מכולת דשבורד</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <style>
-        /* ---- Page-specific styles ---- */
-
-        /* Profit card gets a coloured left border as accent */
-        .kpi-card.main-profit {
-            border-right: 4px solid var(--profit);
-        }
-        .kpi-card.main-profit.is-loss {
-            border-right-color: var(--loss);
-        }
-
-        /* Ratio bar under the profit card */
-        .ratio-bar {
-            height: 4px;
-            border-radius: 2px;
-            background: #e2e8f0;
-            margin-top: 0.5rem;
-            overflow: hidden;
-        }
-        .ratio-bar-fill {
-            height: 100%;
-            border-radius: 2px;
-            background: var(--neutral);
-            transition: width 0.6s ease;
-        }
-        .ratio-label {
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            margin-top: 0.25rem;
-        }
-    </style>
 </head>
 <body>
 
@@ -132,9 +101,8 @@ document.getElementById('current-month').textContent =
     new Date().toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
 
 // ── Helpers ────────────────────────────────────────────────────
-
-function show(el)  { el.style.display = ''; }
-function hide(el)  { el.style.display = 'none'; }
+function show(el) { el.style.display = ''; }
+function hide(el) { el.style.display = 'none'; }
 
 // ── KPI Cards ─────────────────────────────────────────────────
 
@@ -152,46 +120,57 @@ async function loadSummary() {
 }
 
 function renderKpis(section, d) {
-    const profitPositive = d.profit >= 0;
-    const profitClass    = profitPositive ? 'profit' : 'loss';
-    const badgeClass     = d.is_finalized ? 'finalized' : 'estimated';
-    const badgeText      = d.is_finalized ? 'סופי' : 'משוער';
-    const pct            = Math.min(100, Math.round(d.ratio * 100));
+    const profitPositive  = d.profit >= 0;
+    const profitCardClass = profitPositive ? 'kpi-card--profit' : 'kpi-card--loss';
+    const profitValClass  = profitPositive ? 'profit' : 'loss';
+    const badgeClass      = d.is_finalized ? 'finalized' : 'estimated';
+    const badgeText       = d.is_finalized ? 'סופי' : 'משוער';
+    const pct             = Math.min(100, Math.round(d.ratio * 100));
 
     section.innerHTML = `
-        <!-- Profit (main) -->
-        <div class="kpi-card main-profit ${profitPositive ? '' : 'is-loss'}">
-            <span class="kpi-label">רווח חודש שוטף</span>
-            <span class="kpi-value ${profitClass}">${formatMoney(d.profit)}</span>
+        <div class="kpi-card ${profitCardClass}">
+            <div class="kpi-header">
+                <span class="kpi-icon">💰</span>
+                <span class="kpi-label">רווח חודש שוטף</span>
+            </div>
+            <span class="kpi-value ${profitValClass}">${formatMoney(d.profit)}</span>
             <span class="kpi-badge ${badgeClass}">${badgeText}</span>
             <div class="ratio-bar">
                 <div class="ratio-bar-fill" style="width:${pct}%"></div>
             </div>
-            <span class="ratio-label">יום ${d.days_passed} מתוך ${d.days_in_month} (${pct}% מהחודש)</span>
+            <span class="ratio-label">יום ${d.days_passed} מתוך ${d.days_in_month} · ${pct}% מהחודש</span>
         </div>
 
-        <!-- Income -->
-        <div class="kpi-card">
-            <span class="kpi-label">הכנסות</span>
+        <div class="kpi-card kpi-card--income">
+            <div class="kpi-header">
+                <span class="kpi-icon">📈</span>
+                <span class="kpi-label">הכנסות</span>
+            </div>
             <span class="kpi-value profit">${formatMoney(d.income)}</span>
         </div>
 
-        <!-- Goods -->
-        <div class="kpi-card">
-            <span class="kpi-label">סחורה (BilBoy)</span>
+        <div class="kpi-card kpi-card--goods">
+            <div class="kpi-header">
+                <span class="kpi-icon">🛒</span>
+                <span class="kpi-label">סחורה (BilBoy)</span>
+            </div>
             <span class="kpi-value loss">${formatMoney(d.goods)}</span>
         </div>
 
-        <!-- Fixed expenses (prorated) -->
-        <div class="kpi-card">
-            <span class="kpi-label">הוצאות קבועות</span>
-            <span class="kpi-value loss">${formatMoney(d.fixed_prorated)}</span>
+        <div class="kpi-card kpi-card--fixed">
+            <div class="kpi-header">
+                <span class="kpi-icon">🏠</span>
+                <span class="kpi-label">הוצאות קבועות</span>
+            </div>
+            <span class="kpi-value fixed">${formatMoney(d.fixed_prorated)}</span>
         </div>
 
-        <!-- Salaries -->
-        <div class="kpi-card">
-            <span class="kpi-label">שכר עובדים</span>
-            <span class="kpi-value loss">${formatMoney(d.salary)}</span>
+        <div class="kpi-card kpi-card--salary">
+            <div class="kpi-header">
+                <span class="kpi-icon">👷</span>
+                <span class="kpi-label">שכר עובדים</span>
+            </div>
+            <span class="kpi-value salary">${formatMoney(d.salary)}</span>
         </div>
     `;
 }
@@ -199,14 +178,13 @@ function renderKpis(section, d) {
 // ── Chart + Table (shared fetch) ───────────────────────────────
 
 async function loadHistory() {
-    const chartLoading  = document.getElementById('chart-loading');
-    const chartWrapper  = document.getElementById('chart-wrapper');
-    const tbody         = document.getElementById('history-tbody');
+    const chartLoading = document.getElementById('chart-loading');
+    const chartWrapper = document.getElementById('chart-wrapper');
+    const tbody        = document.getElementById('history-tbody');
     try {
         const res = await fetch('/api/history');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const months = await res.json();
-
         renderChart(months, chartLoading, chartWrapper);
         renderTable(months, tbody);
     } catch (err) {
@@ -221,15 +199,12 @@ async function loadHistory() {
 function renderChart(months, loadingEl, wrapperEl) {
     hide(loadingEl);
     show(wrapperEl);
-
-    const labels = months.map(m => m.label);
-    const values = months.map(m => m.profit);
-    buildProfitBarChart('profit-chart', labels, values);
+    buildProfitBarChart('profit-chart', months.map(m => m.label), months.map(m => m.profit));
 }
 
 function renderTable(months, tbody) {
     if (!months.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-secondary);padding:2rem">אין נתונים</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem">אין נתונים</td></tr>';
         return;
     }
     tbody.innerHTML = months.map(m => {
@@ -243,8 +218,8 @@ function renderTable(months, tbody) {
                 <td class="money profit">${formatMoney(m.income)}</td>
                 <td class="money loss">${formatMoney(m.goods)}</td>
                 <td class="money loss">${formatMoney(m.electricity)}</td>
-                <td class="money loss">${formatMoney(m.fixed_prorated)}</td>
-                <td class="money loss">${formatMoney(m.salary)}</td>
+                <td class="money fixed">${formatMoney(m.fixed_prorated)}</td>
+                <td class="money salary">${formatMoney(m.salary)}</td>
                 <td class="money ${profitClass}">${formatMoney(m.profit)}</td>
                 <td>${badge}</td>
             </tr>

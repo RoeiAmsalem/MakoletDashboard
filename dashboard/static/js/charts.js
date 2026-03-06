@@ -7,13 +7,15 @@
 
 'use strict';
 
-// Design system palette (mirrors CSS variables)
+// Design system palette — Option C (mirrors CSS variables)
 const PALETTE = {
     profit:  '#22c55e',
     loss:    '#ef4444',
-    neutral: '#3b82f6',
+    accent:  '#6366f1',
     surface: '#1e293b',
-    border:  '#e2e8f0',
+    border:  '#334155',      // dark card border
+    gridLine:'#1e293b',      // subtle grid on dark bg
+    tickText:'#94a3b8',      // --text-secondary
 };
 
 /**
@@ -87,12 +89,14 @@ function buildProfitBarChart(canvasId, labels, values) {
             scales: {
                 x: {
                     grid: { display: false },
-                    ticks: { color: '#64748b', font: { size: 12 } },
+                    ticks: { color: PALETTE.tickText, font: { size: 12 } },
+                    border: { color: PALETTE.border },
                 },
                 y: {
-                    grid: { color: '#f1f5f9' },
+                    grid: { color: PALETTE.gridLine },
+                    border: { color: PALETTE.border },
                     ticks: {
-                        color: '#64748b',
+                        color: PALETTE.tickText,
                         font: { size: 11 },
                         callback: v => '₪ ' + Number(v).toLocaleString('he-IL'),
                     },

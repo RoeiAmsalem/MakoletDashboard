@@ -1,0 +1,277 @@
+/* ============================================================
+   MakoletDashboard – Shared Styles
+   Design system: RTL, dark navy bg, white cards, green/red/blue
+   ============================================================ */
+
+/* --- CSS Variables (design tokens) --- */
+:root {
+    --bg:             #0f172a;
+    --surface:        #1e293b;
+    --card:           #ffffff;
+    --card-border:    #e2e8f0;
+    --profit:         #22c55e;
+    --loss:           #ef4444;
+    --neutral:        #3b82f6;
+    --text-primary:   #1e293b;
+    --text-secondary: #64748b;
+    --text-light:     #f8fafc;
+    --radius:         12px;
+    --shadow:         0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06);
+}
+
+/* --- Reset & Base --- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+    direction: rtl;
+    font-family: 'Segoe UI', 'Arial', sans-serif;
+    font-size: 16px;
+    background: var(--bg);
+    color: var(--text-primary);
+}
+
+body {
+    min-height: 100vh;
+    background: var(--bg);
+}
+
+/* --- Navbar --- */
+.navbar {
+    background: var(--surface);
+    color: var(--text-light);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+    height: 60px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.store-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-light);
+}
+
+.page-title {
+    font-size: 0.95rem;
+    color: #94a3b8;
+    border-right: 1px solid #334155;
+    padding-right: 0.75rem;
+}
+
+.navbar-meta {
+    font-size: 0.9rem;
+    color: #94a3b8;
+}
+
+.navbar-nav {
+    display: flex;
+    gap: 0.25rem;
+    list-style: none;
+}
+
+.navbar-nav a {
+    color: #94a3b8;
+    text-decoration: none;
+    padding: 0.4rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    transition: background 0.15s, color 0.15s;
+}
+
+.navbar-nav a:hover,
+.navbar-nav a.active {
+    background: rgba(255,255,255,0.08);
+    color: var(--text-light);
+}
+
+@media (max-width: 600px) {
+    .navbar {
+        flex-wrap: wrap;
+        height: auto;
+        padding: 0.75rem 1rem;
+        gap: 0.5rem;
+    }
+    .navbar-nav { display: none; } /* collapsed on mobile */
+}
+
+/* --- Main Content --- */
+.main-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* --- Card --- */
+.card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+}
+
+/* --- KPI Cards Grid --- */
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.kpi-card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.kpi-label {
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+.kpi-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.kpi-value.profit  { color: var(--profit); }
+.kpi-value.loss    { color: var(--loss); }
+.kpi-value.neutral { color: var(--neutral); }
+
+.kpi-badge {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+}
+
+.kpi-badge.finalized {
+    background: #dcfce7;
+    color: #15803d;
+}
+
+.kpi-badge.estimated {
+    background: #fef9c3;
+    color: #a16207;
+}
+
+/* --- Section Title --- */
+.section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+}
+
+/* --- Chart Card --- */
+.chart-card {
+    min-height: 320px;
+}
+
+.chart-wrapper {
+    position: relative;
+    height: 280px;
+}
+
+/* --- Data Table --- */
+.data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.data-table thead th {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-secondary);
+    padding: 0.6rem 0.75rem;
+    border-bottom: 2px solid var(--card-border);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.data-table tbody td {
+    padding: 0.65rem 0.75rem;
+    border-bottom: 1px solid var(--card-border);
+    color: var(--text-primary);
+}
+
+.data-table tbody tr:nth-child(odd) td  { background: #f8fafc; }
+.data-table tbody tr:hover td           { background: #f1f5f9; }
+
+.data-table td.money {
+    text-align: left;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.data-table td.profit { color: var(--profit); font-weight: 600; }
+.data-table td.loss   { color: var(--loss);   font-weight: 600; }
+
+/* --- Loading Spinner --- */
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 2.5rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid #e2e8f0;
+    border-top-color: var(--neutral);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* --- Error message --- */
+.error-msg {
+    color: var(--loss);
+    text-align: center;
+    padding: 2rem;
+    font-size: 0.95rem;
+}
+
+/* --- Responsive: stack cards on mobile --- */
+@media (max-width: 600px) {
+    .cards-grid {
+        grid-template-columns: 1fr;
+    }
+    .main-content {
+        padding: 1rem;
+    }
+    .kpi-value {
+        font-size: 1.6rem;
+    }
+}

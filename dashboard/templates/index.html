@@ -49,8 +49,17 @@
             <li><a href="/" class="active">בית</a></li>
         </ul>
     </nav>
-    <div class="navbar-meta">
-        <span id="current-month"></span>
+    <div class="navbar-end">
+        <span id="current-month" class="navbar-meta"></span>
+        <span class="navbar-user">
+            {{ current_user.username }}
+            {% if current_user.is_admin %}
+            <span class="role-badge admin">מנהל</span>
+            {% else %}
+            <span class="role-badge viewer">צופה</span>
+            {% endif %}
+        </span>
+        <a href="{{ url_for('logout') }}" class="btn-logout">יציאה</a>
     </div>
 </nav>
 
@@ -113,6 +122,10 @@
 <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 <script>
 'use strict';
+
+// Injected by Flask-Login — used to show/hide admin-only UI
+const USER_ROLE = {{ current_user.role | tojson }};
+const IS_ADMIN  = USER_ROLE === 'admin';
 
 // ── Navbar: current month ──────────────────────────────────────
 document.getElementById('current-month').textContent =

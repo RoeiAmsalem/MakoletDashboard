@@ -309,5 +309,5 @@ def api_history():
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    port = int(os.getenv("DASHBOARD_PORT", 5000))
+    port = int(os.getenv("DASHBOARD_PORT", 8080))
     app.run(debug=True, port=port)

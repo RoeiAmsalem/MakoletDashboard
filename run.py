@@ -17,5 +17,5 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from dashboard.app import app  # noqa: E402
 
 if __name__ == "__main__":
-    port = int(os.getenv("DASHBOARD_PORT", 5000))
+    port = int(os.getenv("DASHBOARD_PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=True)

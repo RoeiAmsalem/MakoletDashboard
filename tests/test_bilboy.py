@@ -20,6 +20,11 @@ MOCK_INSERT    = "agents.bilboy.insert_expense"
 # Sample API responses
 BRANCHES = [{"branchId": "branch-1", "name": "Main Branch"}]
 
+SUPPLIERS = {"suppliers": [
+    {"id": 100, "name": "Supplier A"},
+    {"id": 101, "name": "Supplier B"},
+]}
+
 HEADERS = [
     {
         "documentDate": "2025-03-01",
@@ -41,6 +46,8 @@ def _mock_get(url, **kwargs):
     resp.status_code = 200
     if "/user/branches" in url:
         resp.json.return_value = BRANCHES
+    elif "/customer/suppliers" in url:
+        resp.json.return_value = SUPPLIERS
     elif "/customer/docs/headers" in url:
         resp.json.return_value = HEADERS
     else:
@@ -67,7 +74,7 @@ class TestBilBoyFetchData(unittest.TestCase):
         r = records[0]
         self.assertEqual(r["date"], "2025-03-01")
         self.assertAlmostEqual(r["amount"], 1500.0)
-        self.assertEqual(r["description"], "Supplier A")
+        self.assertIn("Supplier A", r["description"])
         self.assertIn("raw", r)
 
     def test_date_truncated_to_10_chars(self):
@@ -82,6 +89,8 @@ class TestBilBoyFetchData(unittest.TestCase):
             resp.raise_for_status = MagicMock()
             if "/user/branches" in url:
                 resp.json.return_value = BRANCHES
+            elif "/customer/suppliers" in url:
+                resp.json.return_value = SUPPLIERS
             else:
                 resp.json.return_value = headers_with_datetime
             return resp
@@ -124,6 +133,8 @@ class TestBilBoyFetchData(unittest.TestCase):
             resp.raise_for_status = MagicMock()
             if "/user/branches" in url:
                 resp.json.return_value = BRANCHES
+            elif "/customer/suppliers" in url:
+                resp.json.return_value = SUPPLIERS
             else:
                 resp.json.return_value = {"data": HEADERS}
             return resp

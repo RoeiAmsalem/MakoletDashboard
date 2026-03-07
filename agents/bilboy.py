@@ -49,17 +49,40 @@ class BilBoyAgent(BaseAgent):
         resp.raise_for_status()
         return resp.json()
 
-    def _get_branch(self) -> tuple[str, list[str]]:
-        """Return (branch_id, supplier_ids) from the first branch."""
+    def _get_branch_id(self) -> str:
         branches = self._get("/user/branches")
         if not branches:
             raise ValueError("No branches returned from BilBoy API")
         first = branches[0] if isinstance(branches, list) else branches
-        branch_id = str(first.get("branchId") or first.get("id") or first.get("branch_id", ""))
-        supplier_ids = [str(s) for s in (first.get("suppliers") or [])]
-        return branch_id, supplier_ids
+        return str(first.get("branchId") or first.get("id") or first.get("branch_id", ""))
 
-    def _get_invoice_headers(self, branch_id: str, supplier_ids: list[str],
+    def _get_supplier_ids(self, branch_id: str) -> tuple[list[str], list[str]]:
+        """
+        Fetch all suppliers for a branch.
+        Returns (all_ids_csv, skip_ids) where skip_ids are franchise suppliers.
+        Filters out זיכיונות המכולת at the supplier level.
+        """
+        raw = self._get("/customer/suppliers", params={
+            "customerBranchId": branch_id,
+            "all": "true",
+        })
+        suppliers = raw.get("suppliers") if isinstance(raw, dict) else raw
+        if not suppliers:
+            return "", []
+
+        keep_ids = []
+        skip_names = []
+        for s in suppliers:
+            name = s.get("title") or s.get("name") or s.get("supplierName") or ""
+            sid = str(s.get("id") or s.get("supplierId") or "")
+            if "זיכיונות המכולת" in name:
+                skip_names.append(name)
+                continue
+            if sid:
+                keep_ids.append(sid)
+        return ",".join(keep_ids), skip_names
+
+    def _get_invoice_headers(self, branch_id: str, suppliers_csv: str,
                              from_date: str | None = None,
                              to_date: str | None = None) -> list[dict]:
         """
@@ -71,12 +94,12 @@ class BilBoyAgent(BaseAgent):
             from_date = from_date or yesterday.isoformat()
             to_date = to_date or yesterday.isoformat()
 
-        # API requires branches and suppliers as repeated query params
-        params = [("branches", branch_id), ("fromDate", from_date), ("toDate", to_date)]
-        for sid in supplier_ids:
-            params.append(("suppliers", sid))
-
-        raw = self._get("/customer/docs/headers", params=params)
+        raw = self._get("/customer/docs/headers", params={
+            "suppliers": suppliers_csv,
+            "branches": branch_id,
+            "from": f"{from_date}T00:00:00",
+            "to": f"{to_date}T00:00:00",
+        })
         # API may return a list directly or wrapped in a key
         if isinstance(raw, list):
             return raw
@@ -98,46 +121,26 @@ class BilBoyAgent(BaseAgent):
                 "raw": dict        # full API object kept for debugging
             }
         """
-        branch_id, supplier_ids = self._get_branch()
-        self.logger.info("[bilboy] Using branch_id=%s (%d suppliers)", branch_id, len(supplier_ids))
+        branch_id = self._get_branch_id()
+        self.logger.info("[bilboy] Using branch_id=%s", branch_id)
 
-        all_invoices = self._get_invoice_headers(branch_id, supplier_ids)
-        self.logger.info("[bilboy] Fetched %d invoice headers", len(all_invoices))
+        suppliers_csv, skipped_names = self._get_supplier_ids(branch_id)
+        if skipped_names:
+            self.logger.info("[bilboy] Filtered out %d franchise supplier(s)", len(skipped_names))
+        if not suppliers_csv:
+            self.logger.warning("[bilboy] No supplier IDs found")
+            return []
 
-        # Filter out franchise fees (זיכיונות המכולת)
-        invoices = []
-        skipped = 0
-        for inv in all_invoices:
-            supplier = inv.get("supplierName") or inv.get("description") or ""
-            if "זיכיונות המכולת" in supplier:
-                skipped += 1
-                continue
-            invoices.append(inv)
-        if skipped:
-            self.logger.info("[bilboy] Skipped %d invoice(s) from זיכיונות המכולת", skipped)
+        invoices = self._get_invoice_headers(branch_id, suppliers_csv)
+        self.logger.info("[bilboy] Fetched %d invoice headers", len(invoices))
 
         records = []
         for inv in invoices:
-            # Normalise date field (API uses various key names)
-            raw_date = (
-                inv.get("documentDate")
-                or inv.get("date")
-                or inv.get("docDate")
-                or date.today().isoformat()
-            )
-            # Normalise amount field
-            amount = float(
-                inv.get("totalAmount")
-                or inv.get("total")
-                or inv.get("amount")
-                or 0
-            )
-            description = (
-                inv.get("supplierName")
-                or inv.get("description")
-                or inv.get("docNumber")
-                or "BilBoy invoice"
-            )
+            raw_date = inv.get("date") or inv.get("documentDate") or date.today().isoformat()
+            amount = float(inv.get("totalWithVat") or inv.get("totalAmount") or inv.get("amount") or 0)
+            supplier = inv.get("supplierName") or ""
+            ref_number = str(inv.get("refNumber") or inv.get("number") or "")
+            description = supplier or ref_number or "BilBoy invoice"
             records.append(
                 {
                     "date": str(raw_date)[:10],  # ensure YYYY-MM-DD

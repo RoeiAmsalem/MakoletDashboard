@@ -159,6 +159,44 @@ body {
     color: var(--text-light);
 }
 
+/* --- Navbar Dropdown ---------------------------------------- */
+.nav-dropdown {
+    position: relative;
+}
+
+.nav-dropdown .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.25rem;
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 0.35rem 0;
+    min-width: 180px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    list-style: none;
+    z-index: 200;
+}
+
+.nav-dropdown:hover .dropdown-menu {
+    display: block;
+}
+
+.nav-dropdown .dropdown-menu li a {
+    display: block;
+    padding: 0.5rem 1rem;
+    font-size: 0.88rem;
+    color: #f1f5f9;
+    border-radius: 0;
+    white-space: nowrap;
+}
+
+.nav-dropdown .dropdown-menu li a:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
 /* --- Main Content -------------------------------------------- */
 .main-content {
     max-width: 1200px;

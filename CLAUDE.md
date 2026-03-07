@@ -1,291 +1,246 @@
-# CLAUDE.md - MakoletDashboard
+# 🏪 Makolet Dashboard - מערכת ניהול כספי למכולת
 
-This file provides guidance to Claude Code when working with code in this repository.
-Read this file completely before writing any code.
-
----
-
-## Project Overview
-
-מערכת דשבורד אוטומטית לניהול כספי של מכולת.
-**צבא סוכנים** שמושכים נתונים כל לילה ממקורות שונים → DB → דשבורד ויזואלי.
+## סקירה כללית
+מערכת אוטומטית שמוציאה נתונים כספיים ממספר אתרים כל לילה,
+שומרת אותם ב-DB, ומציגה דשבורד ויזואלי עם השוואות חודשיות.
 
 ---
 
-## Architecture - Multi-Agent System
+## ארכיטקטורה - Multi-Agent System
 
 ```
 Orchestrator (scheduler.py)
-├── 🤖 agents/aviv_alerts.py     → קורא מייל יומי → הכנסות קופה
-├── 🤖 agents/bilboy.py          → API של BilBoy → הוצאות סחורה
-└── 🤖 agents/electricity.py     → scraping חברת חשמל → חשבון חשמל
+├── 🤖 agents/aviv_pos.py        → מכירות יומיות מאביב קופות
+├── 🤖 agents/bilboy.py          → חשבוניות סחורה מ-Bilboy
+├── 🤖 agents/electricity.py     → חשבון חשמל מחברת חשמל ישראל
+└── 🤖 agents/municipality.py   → ארנונה מפורטל העירייה
          ↓
     📦 database/db.py (SQLite)
          ↓
-    🌐 dashboard/app.py (Flask + HTML/Chart.js)
+    🌐 dashboard/app.py (Flask + HTML/JS)
          ↓
-    📱 notifications/whatsapp.py (CallMeBot - התראות כשסוכן נכשל)
+    📱 notifications/whatsapp.py (התראות כשסוכן נכשל)
 ```
 
 ---
 
-## Stack
-
-| רכיב | טכנולוגיה |
-|------|-----------|
-| Scraping | Playwright (Python) |
-| מייל | imaplib (Python built-in) |
-| Backend | Flask |
-| Database | SQLite |
-| Frontend | HTML + Chart.js |
-| תזמון | APScheduler |
-| התראות | CallMeBot (WhatsApp) |
-
----
-
-## Directory Structure
+## מבנה תיקיות
 
 ```
-MakoletDashboard/
-├── CLAUDE.md
+makolet-dashboard/
+├── CLAUDE.md                  ← הקובץ הזה
 ├── README.md
 ├── requirements.txt
-├── .env                        ← סיסמאות (לא ב-git!)
-├── .env.example
+├── .env                       ← סיסמאות ומפתחות (לא ב-git!)
+├── .env.example               ← תבנית ל-.env
 ├── .gitignore
 │
-├── agents/
+├── agents/                    ← סוכני ה-scraping
 │   ├── __init__.py
-│   ├── base_agent.py           ← מחלקת בסיס לכל הסוכנים
-│   ├── aviv_alerts.py          ← קורא מייל מאביב התראות
-│   ├── bilboy.py               ← API של BilBoy (JWT token)
-│   └── electricity.py          ← scraping חברת חשמל
+│   ├── base_agent.py          ← מחלקת בסיס לכל הסוכנים
+│   ├── aviv_pos.py            ← סוכן אביב קופות
+│   ├── bilboy.py              ← סוכן Bilboy
+│   ├── electricity.py         ← סוכן חברת חשמל
+│   └── municipality.py        ← סוכן ארנונה
 │
 ├── database/
 │   ├── __init__.py
-│   ├── db.py                   ← חיבור + פונקציות CRUD
-│   ├── models.py               ← הגדרת טבלאות
-│   └── makolet.db              ← קובץ DB (לא ב-git!)
+│   ├── db.py                  ← חיבור ל-SQLite + פונקציות CRUD
+│   ├── models.py              ← הגדרת טבלאות
+│   └── makolet.db             ← קובץ ה-DB (לא ב-git!)
 │
 ├── dashboard/
-│   ├── app.py                  ← Flask server
+│   ├── app.py                 ← Flask server
 │   ├── templates/
-│   │   ├── index.html          ← מסך בית - רווח משוער שוטף
-│   │   ├── employees.html      ← ניהול עובדים ותעריפים
-│   │   └── history.html        ← השוואות חודשיות
+│   │   └── index.html         ← דשבורד ראשי
 │   └── static/
 │       ├── css/style.css
-│       └── js/charts.js
+│       └── js/charts.js       ← גרפים עם Chart.js
 │
 ├── notifications/
 │   ├── __init__.py
-│   └── whatsapp.py
+│   └── whatsapp.py            ← שליחת הודעות WhatsApp (Twilio/CallMeBot)
 │
-├── scheduler.py                ← תזמון לילי
-└── run_all_agents.py           ← הרצה ידנית של כל הסוכנים
+├── scheduler.py               ← מנהל התזמון הלילי (cron)
+└── run_all_agents.py          ← הרצה ידנית של כל הסוכנים
 ```
 
 ---
 
-## Data Sources
+## Stack טכנולוגי
 
-### 1. BilBoy (סחורה) - agents/bilboy.py ✅ כבר נכתב
-- **שיטה:** REST API עם JWT Token
-- **API Base:** `https://app.billboy.co.il:5050/api`
-- **Flow:** GET /user/branches → GET /customer/suppliers → GET /customer/docs/headers
-- **Auth:** Bearer token מ-`.env` → `BILBOY_TOKEN`
-- **⚠️ חשוב:** Login הוא OTP לטלפון - לא ניתן לאוטומציה. הטוקן נשמר ב-.env ומחודש ידנית כשפג.
-
-### 2. אביב התראות (הכנסות קופה) - agents/aviv_alerts.py
-- **שיטה:** קריאת מייל יומי דרך IMAP
-- **credentials:** `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `AVIV_SENDER_EMAIL`
-
-### 3. חברת חשמל - agents/electricity.py
-- **שיטה:** Playwright scraping
-- **URL:** https://www.iec.co.il
-- **credentials:** `ELECTRIC_USERNAME`, `ELECTRIC_PASSWORD`
-
-### 4. עובדים (ידני)
-- Aviv BI נותן שעות בלבד (אפליקציה בטלפון - אין API)
-- הזנה ידנית חודשית בדשבורד
-- תעריף לכל עובד מוגדר בדשבורד
+| רכיב | טכנולוגיה | סיבה |
+|------|-----------|------|
+| Scraping | Playwright (Python) | עובד טוב עם אתרים ישראלים, תומך JS |
+| Backend | Flask | פשוט, Python, מספיק לדשבורד |
+| Database | SQLite | אין צורך בשרת DB נפרד |
+| Frontend | HTML + Chart.js | Python-friendly, ללא build process |
+| תזמון | APScheduler | ספריית Python, ללא צורך ב-cron מערכת |
+| התראות | CallMeBot API | WhatsApp בחינם, ללא Twilio |
 
 ---
 
-## Database Schema
+## מקורות נתונים
 
-### daily_sales
+### 1. אביב קופות (מכירות)
+- **URL:** להשלים
+- **נתון:** סך מכירות יומי / חודשי
+- **תדירות:** כל לילה ב-02:00
+- **credentials:** `.env` → `AVIV_USERNAME`, `AVIV_PASSWORD`
+
+### 2. Bilboy (סחורה)
+- **URL:** https://www.bilboy.co.il
+- **נתון:** סך חשבוניות לחודש
+- **תדירות:** כל לילה ב-02:30
+- **credentials:** `.env` → `BILBOY_USERNAME`, `BILBOY_PASSWORD`
+
+### 3. חברת חשמל ישראל
+- **URL:** https://www.iec.co.il
+- **נתון:** חשבון חודשי אחרון
+- **תדירות:** פעם בחודש ב-1 לחודש
+- **credentials:** `.env` → `ELECTRIC_USERNAME`, `ELECTRIC_PASSWORD`
+
+### 4. עירייה - ארנונה
+- **URL:** להשלים (תלוי עיר)
+- **נתון:** תשלום ארנונה חודשי
+- **תדירות:** פעם ברבעון
+- **credentials:** `.env` → `MUNICIPALITY_USERNAME`, `MUNICIPALITY_PASSWORD`
+
+---
+
+## סכמת DB
+
+### טבלה: `daily_sales` (מכירות יומיות)
 ```sql
 id, date, total_income, source, created_at
 ```
 
-### expenses
+### טבלה: `expenses` (הוצאות)
 ```sql
 id, date, category, amount, description, source, created_at
 ```
-categories: `goods` | `electricity` | `arnona` | `rent` | `salary` | `vat` | `insurance` | `internet`
+**קטגוריות:** `goods` | `electricity` | `arnona` | `rent` | `salary` | `vat` | `insurance` | `internet`
 
-### employees
-```sql
-id, name, hourly_rate, is_active, created_at
-```
-
-### employee_hours
-```sql
-id, employee_id, month, year, hours_worked, is_finalized, created_at
-```
-
-### fixed_expenses
-```sql
-id, category, amount, valid_from, valid_until, notes
-```
-
-### agent_logs
+### טבלה: `agent_logs` (לוג סוכנים)
 ```sql
 id, agent_name, run_date, status, records_fetched, error_message, duration_seconds, created_at
 ```
 
----
-
-## Estimated Profit Logic (מסך הבית)
-
-```python
-def calculate_estimated_profit(month, year):
-    ratio = days_passed / days_in_month
-
-    income   = sum(daily_sales)           # מאביב התראות
-    goods    = sum(bilboy_invoices)        # מ-BilBoy
-    electric = last_electric_bill         # מחברת חשמל
-    fixed    = (rent + arnona + insurance + internet + vat) * ratio
-    salaries = sum(hours * hourly_rate)   # שעות שהוזנו × תעריף
-
-    return income - goods - electric - fixed - salaries
+### טבלה: `fixed_expenses` (הוצאות קבועות ידניות)
+```sql
+id, category, amount, valid_from, valid_until, notes
 ```
-
-מוצג עם תווית "משוער" + ירוק/אדום.
-כשמזינים שעות סופיות → הופך ל"סופי".
+לקטגוריות שאין להן אתר: שכירות, משכורות, ביטוח, אינטרנט, מע"מ
 
 ---
 
-## Base Agent Pattern
+## מחלקת בסיס לסוכנים (base_agent.py)
 
-כל סוכן חייב לרשת מ-BaseAgent:
+כל סוכן **חייב** לרשת מ-`BaseAgent` ולממש:
 ```python
 class BaseAgent:
-    def run(self) -> dict:       # {"success": bool, "data": [...], "error": str}
-    def fetch_data(self) -> list
-    def save_to_db(self, data)
-    # retry אוטומטי 3 פעמים לפני כישלון
-    # כל כישלון → agent_logs + WhatsApp alert
+    def run(self) -> dict:       # מחזיר {"success": bool, "data": [...], "error": str}
+    def login(self) -> bool      # מתחבר לאתר
+    def fetch_data(self) -> list # מושך את הנתונים
+    def save_to_db(self, data)   # שומר ב-DB
 ```
 
 ---
 
-## Agent Rules (חשוב!)
+## התראות WhatsApp
 
-- Playwright תמיד עם `headless=True` בפרודקשן
-- המתן לאלמנטים עם `wait_for_selector` - לא `time.sleep`
-- תפוס exceptions ושמור ב-`agent_logs`
-- נסה 3 פעמים לפני כישלון סופי
-- אל תשמור credentials בקוד - רק מ-`.env`
-- שמור screenshots רק כשיש שגיאה (debug)
+שימוש ב-**CallMeBot** (חינמי, ללא Twilio):
+- הגדרה: https://www.callmebot.com/blog/free-api-whatsapp-messages/
+- `.env` → `WHATSAPP_PHONE`, `WHATSAPP_API_KEY`
+
+**מתי נשלחת הודעה:**
+- סוכן נכשל לאחר 3 ניסיונות
+- נתון חריג (למשל חשמל גבוה מהרגיל ב-30%)
+- סיכום לילי (אופציונלי)
 
 ---
 
-## Environment Variables (.env)
+## משתני סביבה (.env)
 
 ```env
-# BilBoy
-BILBOY_TOKEN=                   # JWT token - מחדשים ידנית כשפג
+# אביב קופות
+AVIV_USERNAME=
+AVIV_PASSWORD=
 
-# Gmail - אביב התראות
-GMAIL_ADDRESS=
-GMAIL_APP_PASSWORD=             # App Password של Google!
-AVIV_SENDER_EMAIL=              # כתובת המייל של אביב
+# Bilboy
+BILBOY_USERNAME=
+BILBOY_PASSWORD=
 
 # חברת חשמל
 ELECTRIC_USERNAME=
 ELECTRIC_PASSWORD=
 
-# WhatsApp התראות (CallMeBot)
+# עירייה
+MUNICIPALITY_USERNAME=
+MUNICIPALITY_PASSWORD=
+
+# WhatsApp התראות
 WHATSAPP_PHONE=972XXXXXXXXX
 WHATSAPP_API_KEY=
 
-# Flask
+# כללי
 FLASK_SECRET_KEY=
 DASHBOARD_PORT=5000
 ```
 
 ---
 
-## Development Order
+## סדר פיתוח מומלץ
 
-1. **[שלב 1]** `database/` - models + db.py + כל הטבלאות
-2. **[שלב 2]** `agents/base_agent.py` - מחלקת בסיס + retry
-3. **[שלב 3]** `agents/bilboy.py` - כבר קיים, לשלב עם DB
-4. **[שלב 4]** `agents/aviv_alerts.py` - קריאת מייל
-5. **[שלב 5]** `dashboard/` - Flask + מסך בית עם רווח משוער
-6. **[שלב 6]** `dashboard/employees.html` - ניהול עובדים
-7. **[שלב 7]** `notifications/whatsapp.py`
-8. **[שלב 8]** `scheduler.py`
-9. **[שלב 9]** `agents/electricity.py`
-10. **[שלב 10]** Deploy לVPS
+1. **[שלב 1]** `database/` - DB + models
+2. **[שלב 2]** `agents/base_agent.py` - מחלקת בסיס
+3. **[שלב 3]** `agents/bilboy.py` - סוכן ראשון (הכי חשוב)
+4. **[שלב 4]** `agents/aviv_pos.py` - סוכן קופה
+5. **[שלב 5]** `dashboard/` - דשבורד Flask
+6. **[שלב 6]** `notifications/whatsapp.py` - התראות
+7. **[שלב 7]** `scheduler.py` - תזמון לילי
+8. **[שלב 8]** `agents/electricity.py` + `agents/municipality.py`
+9. **[שלב 9]** Deploy לVPS
 
 ---
 
-## Running the Project
+## הנחיות לסוכנים (חשוב!)
+
+- **תמיד** השתמש ב-`playwright` עם `headless=True` בפרודקשן
+- **תמיד** המתן לטעינת אלמנטים עם `wait_for_selector` - לא `sleep`
+- **תמיד** תפוס exceptions ודווח ל-`agent_logs`
+- **תמיד** נסה שוב 3 פעמים לפני כישלון סופי
+- **אל תשמור** credentials בקוד - רק מ-`.env`
+- **אל תשמור** screenshots אלא אם יש שגיאה (לצורך debug)
+
+---
+
+## הרצת הפרויקט
 
 ```bash
-# התקנה
+# התקנת dependencies
 pip install -r requirements.txt
 playwright install chromium
 
-# הגדרה
+# הגדרת סביבה
 cp .env.example .env
+# ערוך את .env עם הפרטים האמיתיים
 
-# הרצת דשבורד
+# הרצת הדשבורד
 python dashboard/app.py
 
-# הרצה ידנית של סוכנים
+# הרצה ידנית של כל הסוכנים
 python run_all_agents.py
 
-# תזמון לילי
+# הפעלת scheduler (ירוץ כל הזמן)
 python scheduler.py
 ```
 
 ---
 
-## Git & GitHub Workflow
+## VPS Deployment
 
-- **Repository:** https://github.com/RoeiAmsalem/MakoletDashboard
-- **Branch:** `main`
-- **User:** Roei Amsalem (roei_amsalem@example.com)
-
-**Commit format:**
-- `feat:` פיצ'ר חדש
-- `fix:` תיקון באג
-- `refactor:` שיפור קוד
-- `docs:` תיעוד
-
-**Workflow:** השלם לוגיקה → commit → push → המשך
-
----
-
-## Context Window Monitor
-
-שני scripts ב-`~/.claude/`:
-- `ctxstats` - snapshot חד פעמי
-- `ctxwatch` - live עם progress bar (מתרענן כל 3 שניות)
-
-```bash
-# בטרמינל נפרד
-ctxwatch
-```
-
----
-
-## Notes
-
-- עדכן קובץ זה ככל שהפרויקט מתפתח
-- תעד החלטות ארכיטקטורה חשובות
-- שמור תיעוד ברמת "תמונה כללית" - לא פרטים קטנים
+- **OS:** Ubuntu 22.04
+- **הרצה רציפה:** systemd service או `screen`
+- **לוגים:** `/var/log/makolet/`
+- **גיבוי DB:** cron job יומי ל-backup של `makolet.db`

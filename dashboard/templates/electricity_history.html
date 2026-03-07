@@ -73,57 +73,9 @@
             cursor: pointer;
             font-family: inherit;
             transition: background 0.15s;
+            text-decoration: none;
         }
         .btn-pdf:hover { background: rgba(251,191,36,0.22); }
-
-        /* ── PDF Modal ── */
-        .pdf-modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.85);
-            z-index: 999;
-            flex-direction: column;
-        }
-        .pdf-modal-overlay.open { display: flex; }
-
-        .pdf-modal-bar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0.75rem 1.25rem;
-            background: #1e293b;
-            border-bottom: 1px solid #334155;
-            flex-shrink: 0;
-        }
-        .pdf-modal-bar span {
-            font-size: 0.9rem;
-            color: var(--text-secondary);
-        }
-        .btn-close-modal {
-            background: none;
-            border: 1px solid #334155;
-            border-radius: 6px;
-            color: var(--text-secondary);
-            font-size: 1rem;
-            padding: 0.25rem 0.65rem;
-            cursor: pointer;
-            font-family: inherit;
-        }
-        .btn-close-modal:hover {
-            background: rgba(239,68,68,0.12);
-            border-color: rgba(239,68,68,0.35);
-            color: #fca5a5;
-        }
-        .pdf-embed-wrap {
-            flex: 1;
-            overflow: hidden;
-        }
-        .pdf-embed-wrap embed {
-            width: 100%;
-            height: 100%;
-            border: none;
-        }
 
         /* ── tfoot ── */
         tfoot td {
@@ -145,9 +97,14 @@
     <nav>
         <ul class="navbar-nav">
             <li><a href="/">בית</a></li>
-            <li><a href="/fixed-expenses">הוצאות קבועות</a></li>
+            <li class="nav-dropdown">
+                <a href="/fixed-expenses" class="dropdown-toggle active">הוצאות קבועות ▾</a>
+                <ul class="dropdown-menu">
+                    <li><a href="/fixed-expenses">הוצאות קבועות</a></li>
+                    <li><a href="/electricity-history" class="active" style="color:#fbbf24">היסטוריית חשמל ⚡</a></li>
+                </ul>
+            </li>
             <li><a href="/employees">עובדים</a></li>
-            <li><a href="/electricity-history" class="active">חשמל</a></li>
         </ul>
     </nav>
     <div class="navbar-end">
@@ -227,38 +184,12 @@
 
 </main>
 
-<!-- PDF Modal -->
-<div class="pdf-modal-overlay" id="pdf-modal" role="dialog" aria-modal="true">
-    <div class="pdf-modal-bar">
-        <span id="pdf-modal-title">צפייה בחשבון</span>
-        <button class="btn-close-modal" onclick="closePdfModal()">✕ סגור</button>
-    </div>
-    <div class="pdf-embed-wrap">
-        <embed id="pdf-embed" src="" type="application/pdf" width="100%" height="100%">
-    </div>
-</div>
-
 <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 <script>
 'use strict';
 
 document.getElementById('current-month').textContent =
     new Date().toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
-
-// Close modal on Escape
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePdfModal(); });
-
-// ── PDF Modal ─────────────────────────────────────────────────
-function openPdfModal(filename, label) {
-    document.getElementById('pdf-embed').src = `/api/electricity/pdf/${filename}`;
-    document.getElementById('pdf-modal-title').textContent = label || 'צפייה בחשבון';
-    document.getElementById('pdf-modal').classList.add('open');
-}
-
-function closePdfModal() {
-    document.getElementById('pdf-modal').classList.remove('open');
-    document.getElementById('pdf-embed').src = '';
-}
 
 // ── Helpers ───────────────────────────────────────────────────
 function fmtPeriod(start, end) {
@@ -273,7 +204,7 @@ function fmtPeriod(start, end) {
 function billRow(b) {
     const daily = b.billing_days ? (b.amount / b.billing_days).toFixed(0) : '—';
     const pdfBtn = b.pdf_filename
-        ? `<button class="btn-pdf" onclick="openPdfModal('${b.pdf_filename}','${fmtPeriod(b.period_start,b.period_end)}')">📄 PDF</button>`
+        ? `<button class="btn-pdf" onclick="window.open('/api/electricity/pdf/${b.pdf_filename}','_blank')">📄 PDF</button>`
         : '<span style="color:var(--text-muted)">—</span>';
     return `<tr>
         <td>${fmtPeriod(b.period_start, b.period_end)}</td>

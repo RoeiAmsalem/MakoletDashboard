@@ -59,7 +59,7 @@ SKIP_SUBJECTS = [
 # Subject: "... לתקופה - DD/MM/YYYY - DD/MM/YYYY ..."
 # Note: END date appears FIRST in the subject, then START date
 DATE_PATTERN   = re.compile(r'לתקופה - (\d{2}/\d{2}/\d{4}) - (\d{2}/\d{2}/\d{4})')
-AMOUNT_PATTERN = re.compile(r'סה"כ כולל מע"מ לתקופת חשבון\s*([\d,]+\.?\d*)')
+AMOUNT_PATTERN = re.compile(r'([\d,]+\.?\d*)\s+ןובשח תפוקתל מ"עמ ללוכ כ"הס')
 PDF_NAME_RE    = re.compile(r'^\d{4}-\d+_\d{8}_\d{6}\.pdf$', re.IGNORECASE)
 
 _PROJECT_ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

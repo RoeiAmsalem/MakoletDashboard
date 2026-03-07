@@ -105,3 +105,21 @@ def _migrate_expenses_columns(conn):
             conn.commit()
         except Exception:
             pass  # Column already exists
+    _cleanup_duplicate_electricity(conn)
+
+
+def _cleanup_duplicate_electricity(conn):
+    """Remove duplicate electricity expenses (same pdf_filename, keep lowest id)."""
+    conn.execute("""
+        DELETE FROM expenses
+        WHERE category = 'electricity'
+          AND pdf_filename IS NOT NULL
+          AND id NOT IN (
+              SELECT MIN(id)
+              FROM expenses
+              WHERE category = 'electricity'
+                AND pdf_filename IS NOT NULL
+              GROUP BY pdf_filename
+          )
+    """)
+    conn.commit()

@@ -10,7 +10,7 @@ Usage:
 import sqlite3
 import os
 from datetime import datetime, date
-from database.models import create_tables
+from database.models import create_tables, _migrate_expenses_columns
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "makolet.db")
 
@@ -34,7 +34,8 @@ def init_db(seed: bool = False):
     If seed=True, also insert one sample row per table (for testing/dev).
     """
     conn = get_connection()
-    create_tables(conn)
+    create_tables(conn)            # CREATE TABLE IF NOT EXISTS for all tables
+    _migrate_expenses_columns(conn)  # ALTER TABLE to add new columns (idempotent)
     _seed_default_fixed_expenses(conn)
     if seed:
         _seed_sample_data(conn)

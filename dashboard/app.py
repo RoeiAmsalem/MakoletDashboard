@@ -32,7 +32,9 @@ if _PROJECT_ROOT not in sys.path:
 from datetime import date
 from dateutil.relativedelta import relativedelta
 
-from flask import Flask, jsonify, redirect, render_template, request, url_for
+import re
+
+from flask import Flask, abort, jsonify, redirect, render_template, request, send_from_directory, url_for
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -49,6 +51,8 @@ from database.db import (
     delete_fixed_expense,
     get_all_employees,
     get_all_fixed_expenses,
+    get_electricity_bills,
+    get_electricity_monthly_estimate,
     get_employee_hours,
     init_db,
     insert_employee,
@@ -58,6 +62,8 @@ from database.db import (
     update_fixed_expense_amount,
     upsert_employee_hours,
 )
+
+_ELEC_BILLS_DIR = os.path.join(_PROJECT_ROOT, "data", "electricity_bills")
 
 load_dotenv()
 
@@ -162,6 +168,12 @@ def fixed_expenses():
 @login_required
 def employees():
     return render_template("employees.html")
+
+
+@app.route("/electricity-history")
+@login_required
+def electricity_history():
+    return render_template("electricity_history.html")
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +299,31 @@ def api_employees_update(employee_id: int):
         )
 
     return jsonify({"ok": True})
+
+
+@app.route("/api/electricity/bills")
+@login_required
+def api_electricity_bills():
+    rows = get_electricity_bills()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/electricity/estimate")
+@login_required
+def api_electricity_estimate():
+    estimate = get_electricity_monthly_estimate()
+    return jsonify({"monthly_estimate": estimate})
+
+
+@app.route("/api/electricity/pdf/<filename>")
+@login_required
+def api_electricity_pdf(filename):
+    """Serve an IEC bill PDF. Validates filename to prevent path traversal."""
+    if not re.match(r'^[\w\-]+\.pdf$', filename, re.ASCII):
+        abort(400)
+    if not os.path.isdir(_ELEC_BILLS_DIR):
+        abort(404)
+    return send_from_directory(_ELEC_BILLS_DIR, filename)
 
 
 @app.route("/api/history")

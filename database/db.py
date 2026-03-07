@@ -368,6 +368,87 @@ def delete_fixed_expense(expense_id: int) -> None:
 # agent_logs
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# electricity bills
+# ---------------------------------------------------------------------------
+
+def get_electricity_bills() -> list[sqlite3.Row]:
+    """Return all electricity expenses newest first."""
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM expenses WHERE category='electricity' ORDER BY date DESC"
+        ).fetchall()
+
+
+def get_electricity_monthly_estimate() -> float | None:
+    """Latest non-correction bill ÷ 2. Returns None if no bills exist."""
+    with get_connection() as conn:
+        row = conn.execute(
+            """SELECT amount FROM expenses
+               WHERE category='electricity' AND (is_correction=0 OR is_correction IS NULL)
+               ORDER BY date DESC LIMIT 1"""
+        ).fetchone()
+    if row is None:
+        return None
+    return round(row["amount"] / 2, 2)
+
+
+def get_electricity_estimate_for_month(year: int, month: int) -> dict | None:
+    """
+    Smart prorated electricity estimate for a target month.
+
+    Step 1 — find a bill whose period covers (overlaps) the target month.
+    Step 2 — if none, try the same month last year.
+    Step 3 — return None if no historical data.
+
+    Returns:
+        {"estimate": float, "is_estimate": bool, "overlap_days": int, "billing_days": int}
+        or None.
+    """
+    import calendar
+
+    def _prorate(row, ms: date, me: date) -> dict:
+        ps = date.fromisoformat(row["period_start"])
+        pe = date.fromisoformat(row["period_end"])
+        overlap_start = max(ps, ms)
+        overlap_end   = min(pe, me)
+        overlap_days  = max((overlap_end - overlap_start).days + 1, 0)
+        billing_days  = row["billing_days"] or max((pe - ps).days, 1)
+        return {
+            "estimate":     round(row["amount"] * overlap_days / billing_days, 2),
+            "overlap_days": overlap_days,
+            "billing_days": billing_days,
+        }
+
+    def _find_covering_bill(conn, y: int, m: int):
+        m_start = date(y, m, 1).isoformat()
+        m_end   = date(y, m, calendar.monthrange(y, m)[1]).isoformat()
+        return conn.execute(
+            """SELECT * FROM expenses
+               WHERE category='electricity'
+                 AND (is_correction=0 OR is_correction IS NULL)
+                 AND period_start IS NOT NULL AND period_end IS NOT NULL
+                 AND period_start <= ? AND period_end >= ?
+               ORDER BY date DESC LIMIT 1""",
+            (m_end, m_start),
+        ).fetchone(), date(y, m, 1), date(y, m, calendar.monthrange(y, m)[1])
+
+    with get_connection() as conn:
+        row, ms, me = _find_covering_bill(conn, year, month)
+        if row:
+            result = _prorate(row, ms, me)
+            result["is_estimate"] = False
+            return result
+
+        row, ms, me = _find_covering_bill(conn, year - 1, month)
+        if row:
+            result = _prorate(row, ms, me)
+            result["is_estimate"] = True
+            return result
+
+    return None
+
+
 def log_agent_run(agent_name: str, run_date: str, status: str,
                   records_fetched: int = 0, error_message: str = None,
                   duration_seconds: float = None) -> int:

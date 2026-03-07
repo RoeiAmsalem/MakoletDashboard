@@ -87,3 +87,21 @@ def create_tables(conn):
     for statement in ALL_TABLES:
         cursor.execute(statement)
     conn.commit()
+    _migrate_expenses_columns(conn)
+
+
+def _migrate_expenses_columns(conn):
+    """Add electricity-specific columns to expenses if they don't exist yet."""
+    new_cols = [
+        ("is_correction", "BOOLEAN DEFAULT 0"),
+        ("pdf_filename",  "TEXT"),
+        ("period_start",  "TEXT"),
+        ("period_end",    "TEXT"),
+        ("billing_days",  "INTEGER"),
+    ]
+    for col, definition in new_cols:
+        try:
+            conn.execute(f"ALTER TABLE expenses ADD COLUMN {col} {definition}")
+            conn.commit()
+        except Exception:
+            pass  # Column already exists

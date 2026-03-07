@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>היסטוריית חשמל - מכולת דשבורד</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* ── Amber accent overrides ── */
+        .page-accent        { color: #fbbf24; }
+        .kpi-card--elec {
+            background: linear-gradient(135deg, #451a03 0%, #78350f 100%);
+            border-color: rgba(251,191,36,0.25);
+        }
+        .kpi-value.elec     { color: #fde68a; }
+
+        /* ── Table card ── */
+        .table-card {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        .table-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .table-header h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .data-table thead th { background: #162032; }
+
+        /* ── Correction section ── */
+        .correction-banner {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.65rem 1.5rem;
+            background: rgba(239,68,68,0.08);
+            border-top: 1px solid rgba(239,68,68,0.2);
+            font-size: 0.82rem;
+            color: #fca5a5;
+        }
+        .badge-correction {
+            display: inline-block;
+            font-size: 0.7rem;
+            font-weight: 700;
+            padding: 0.15rem 0.5rem;
+            border-radius: 999px;
+            background: rgba(239,68,68,0.18);
+            color: #fca5a5;
+            border: 1px solid rgba(239,68,68,0.3);
+            white-space: nowrap;
+        }
+
+        /* ── PDF button ── */
+        .btn-pdf {
+            font-size: 0.82rem;
+            padding: 0.28rem 0.6rem;
+            background: rgba(251,191,36,0.1);
+            border: 1px solid rgba(251,191,36,0.3);
+            border-radius: 6px;
+            color: #fbbf24;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s;
+        }
+        .btn-pdf:hover { background: rgba(251,191,36,0.22); }
+
+        /* ── PDF Modal ── */
+        .pdf-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 999;
+            flex-direction: column;
+        }
+        .pdf-modal-overlay.open { display: flex; }
+
+        .pdf-modal-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1.25rem;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            flex-shrink: 0;
+        }
+        .pdf-modal-bar span {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+        .btn-close-modal {
+            background: none;
+            border: 1px solid #334155;
+            border-radius: 6px;
+            color: var(--text-secondary);
+            font-size: 1rem;
+            padding: 0.25rem 0.65rem;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .btn-close-modal:hover {
+            background: rgba(239,68,68,0.12);
+            border-color: rgba(239,68,68,0.35);
+            color: #fca5a5;
+        }
+        .pdf-embed-wrap {
+            flex: 1;
+            overflow: hidden;
+        }
+        .pdf-embed-wrap embed {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        /* ── tfoot ── */
+        tfoot td {
+            font-weight: 700;
+            color: #fde68a;
+            background: #1a1d35 !important;
+            border-top: 2px solid rgba(251,191,36,0.25) !important;
+            padding: 0.8rem 0.75rem;
+        }
+    </style>
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="navbar-brand">
+        <span class="store-name">🏪 מכולת</span>
+        <span class="page-title">⚡ היסטוריית חשמל</span>
+    </div>
+    <nav>
+        <ul class="navbar-nav">
+            <li><a href="/">בית</a></li>
+            <li><a href="/fixed-expenses">הוצאות קבועות</a></li>
+            <li><a href="/employees">עובדים</a></li>
+            <li><a href="/electricity-history" class="active">חשמל</a></li>
+        </ul>
+    </nav>
+    <div class="navbar-end">
+        <span id="current-month" class="navbar-meta"></span>
+        <span class="navbar-user">
+            {{ current_user.username }}
+            {% if current_user.is_admin %}
+            <span class="role-badge admin">מנהל</span>
+            {% else %}
+            <span class="role-badge viewer">צופה</span>
+            {% endif %}
+        </span>
+        <a href="{{ url_for('logout') }}" class="btn-logout">יציאה</a>
+    </div>
+</nav>
+
+<main class="main-content">
+
+    <!-- KPI cards -->
+    <section class="cards-grid" id="kpi-section">
+        <div class="loading"><div class="spinner"></div><span>טוען...</span></div>
+    </section>
+
+    <!-- Normal bills table -->
+    <div class="table-card">
+        <div class="table-header">
+            <h2><span class="page-accent">⚡</span> חשבונות חשמל</h2>
+            <span id="bills-count" style="font-size:0.85rem;color:var(--text-secondary)"></span>
+        </div>
+        <div style="overflow-x:auto">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>תקופה</th>
+                        <th>ימים</th>
+                        <th>סכום כולל מע"מ</th>
+                        <th>עלות יומית</th>
+                        <th>PDF</th>
+                    </tr>
+                </thead>
+                <tbody id="bills-tbody">
+                    <tr><td colspan="5">
+                        <div class="loading"><div class="spinner"></div><span>טוען...</span></div>
+                    </td></tr>
+                </tbody>
+                <tfoot id="bills-tfoot"></tfoot>
+            </table>
+        </div>
+    </div>
+
+    <!-- Correction bills (hidden if none) -->
+    <div class="table-card" id="corrections-card" style="display:none">
+        <div class="table-header">
+            <h2>
+                <span class="page-accent">⚠️</span> חשבונות תיקון / צבירה
+                <span class="badge-correction">תיקון</span>
+            </h2>
+        </div>
+        <div class="correction-banner">
+            חשבונות אלו מכסים תקופה של מעל 90 יום — בדרך כלל חיובים מתוקנים או מצטברים. הם אינם נכללים בממוצע החודשי.
+        </div>
+        <div style="overflow-x:auto">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>תקופה</th>
+                        <th>ימים</th>
+                        <th>סכום כולל מע"מ</th>
+                        <th>עלות יומית</th>
+                        <th>PDF</th>
+                    </tr>
+                </thead>
+                <tbody id="corrections-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+</main>
+
+<!-- PDF Modal -->
+<div class="pdf-modal-overlay" id="pdf-modal" role="dialog" aria-modal="true">
+    <div class="pdf-modal-bar">
+        <span id="pdf-modal-title">צפייה בחשבון</span>
+        <button class="btn-close-modal" onclick="closePdfModal()">✕ סגור</button>
+    </div>
+    <div class="pdf-embed-wrap">
+        <embed id="pdf-embed" src="" type="application/pdf" width="100%" height="100%">
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+'use strict';
+
+document.getElementById('current-month').textContent =
+    new Date().toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+
+// Close modal on Escape
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePdfModal(); });
+
+// ── PDF Modal ─────────────────────────────────────────────────
+function openPdfModal(filename, label) {
+    document.getElementById('pdf-embed').src = `/api/electricity/pdf/${filename}`;
+    document.getElementById('pdf-modal-title').textContent = label || 'צפייה בחשבון';
+    document.getElementById('pdf-modal').classList.add('open');
+}
+
+function closePdfModal() {
+    document.getElementById('pdf-modal').classList.remove('open');
+    document.getElementById('pdf-embed').src = '';
+}
+
+// ── Helpers ───────────────────────────────────────────────────
+function fmtPeriod(start, end) {
+    if (!start || !end) return '—';
+    const fmt = d => {
+        const [y, m, day] = d.split('-');
+        return `${day}/${m}/${y}`;
+    };
+    return `${fmt(start)} – ${fmt(end)}`;
+}
+
+function billRow(b) {
+    const daily = b.billing_days ? (b.amount / b.billing_days).toFixed(0) : '—';
+    const pdfBtn = b.pdf_filename
+        ? `<button class="btn-pdf" onclick="openPdfModal('${b.pdf_filename}','${fmtPeriod(b.period_start,b.period_end)}')">📄 PDF</button>`
+        : '<span style="color:var(--text-muted)">—</span>';
+    return `<tr>
+        <td>${fmtPeriod(b.period_start, b.period_end)}</td>
+        <td style="color:var(--text-secondary)">${b.billing_days || '—'}</td>
+        <td class="money elec">${formatMoney(b.amount)}</td>
+        <td style="color:var(--text-secondary);direction:ltr">₪${daily}</td>
+        <td>${pdfBtn}</td>
+    </tr>`;
+}
+
+// ── KPI rendering ─────────────────────────────────────────────
+function renderKpi(normal, all) {
+    const kpi = document.getElementById('kpi-section');
+    if (!all.length) {
+        kpi.innerHTML = '<p style="color:var(--text-muted);padding:1.5rem">אין חשבונות חשמל עדיין.</p>';
+        return;
+    }
+
+    // Average monthly cost from normal bills (prorated per day × 30)
+    const totalDays   = normal.reduce((s, b) => s + (b.billing_days || 0), 0);
+    const totalAmount = normal.reduce((s, b) => s + b.amount, 0);
+    const avgMonthly  = totalDays > 0 ? (totalAmount / totalDays * 30) : 0;
+
+    // Total this calendar year
+    const thisYear = new Date().getFullYear().toString();
+    const totalThisYear = all
+        .filter(b => (b.date || '').startsWith(thisYear))
+        .reduce((s, b) => s + b.amount, 0);
+
+    const amounts   = all.map(b => b.amount);
+    const maxBill   = amounts.length ? Math.max(...amounts) : 0;
+    const minBill   = amounts.length ? Math.min(...amounts) : 0;
+
+    kpi.innerHTML = `
+        <div class="kpi-card kpi-card--elec">
+            <div class="kpi-header">
+                <span class="kpi-icon">⚡</span>
+                <span class="kpi-label">ממוצע לחודש</span>
+            </div>
+            <span class="kpi-value elec">${formatMoney(avgMonthly)}</span>
+            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">מחשבונות רגילים בלבד</span>
+        </div>
+        <div class="kpi-card kpi-card--elec">
+            <div class="kpi-header">
+                <span class="kpi-icon">📅</span>
+                <span class="kpi-label">סה"כ שולם ${thisYear}</span>
+            </div>
+            <span class="kpi-value elec">${formatMoney(totalThisYear)}</span>
+        </div>
+        <div class="kpi-card kpi-card--elec">
+            <div class="kpi-header">
+                <span class="kpi-icon">⬆️</span>
+                <span class="kpi-label">החשבון הגבוה</span>
+            </div>
+            <span class="kpi-value elec">${formatMoney(maxBill)}</span>
+        </div>
+        <div class="kpi-card kpi-card--elec">
+            <div class="kpi-header">
+                <span class="kpi-icon">⬇️</span>
+                <span class="kpi-label">החשבון הנמוך</span>
+            </div>
+            <span class="kpi-value elec">${formatMoney(minBill)}</span>
+        </div>`;
+}
+
+// ── Load data ─────────────────────────────────────────────────
+async function loadBills() {
+    try {
+        const res = await fetch('/api/electricity/bills');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const all = await res.json();
+
+        const normal      = all.filter(b => !b.is_correction);
+        const corrections = all.filter(b =>  b.is_correction);
+
+        renderKpi(normal, all);
+
+        // Normal bills table
+        const tbody = document.getElementById('bills-tbody');
+        document.getElementById('bills-count').textContent = `${normal.length} חשבונות`;
+        if (normal.length) {
+            tbody.innerHTML = normal.map(billRow).join('');
+            const grandTotal = normal.reduce((s, b) => s + b.amount, 0);
+            document.getElementById('bills-tfoot').innerHTML = `
+                <tr>
+                    <td>סה"כ</td><td></td>
+                    <td class="money">${formatMoney(grandTotal)}</td>
+                    <td colspan="2"></td>
+                </tr>`;
+        } else {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">אין חשבונות חשמל עדיין.</td></tr>';
+        }
+
+        // Correction bills
+        if (corrections.length) {
+            document.getElementById('corrections-card').style.display = '';
+            document.getElementById('corrections-tbody').innerHTML = corrections.map(billRow).join('');
+        }
+
+    } catch (err) {
+        console.error(err);
+        document.getElementById('kpi-section').innerHTML = '<p class="error-msg">שגיאה בטעינת נתונים.</p>';
+        document.getElementById('bills-tbody').innerHTML = '<tr><td colspan="5"><p class="error-msg">שגיאה.</p></td></tr>';
+    }
+}
+
+// Add .elec color to data-table td
+document.head.insertAdjacentHTML('beforeend', '<style>.data-table td.elec{color:#fde68a;font-weight:600}</style>');
+
+loadBills();
+</script>
+</body>
+</html>

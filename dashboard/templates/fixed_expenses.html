@@ -157,6 +157,26 @@
             transition: opacity 0.3s;
         }
 
+        /* ── Electricity special row ── */
+        .elec-row td { background: rgba(251,191,36,0.06) !important; }
+        .elec-row:hover td { background: rgba(251,191,36,0.12) !important; }
+        .elec-label { color: #fbbf24; font-weight: 600; }
+        .btn-history {
+            font-size: 0.78rem;
+            font-weight: 700;
+            padding: 0.28rem 0.65rem;
+            background: rgba(251,191,36,0.12);
+            border: 1px solid rgba(251,191,36,0.35);
+            border-radius: 6px;
+            color: #fbbf24;
+            cursor: pointer;
+            font-family: inherit;
+            text-decoration: none;
+            white-space: nowrap;
+            transition: background 0.15s;
+        }
+        .btn-history:hover { background: rgba(251,191,36,0.24); }
+
         /* ── tfoot ── */
         tfoot td {
             font-weight: 700;
@@ -179,6 +199,7 @@
             <li><a href="/">בית</a></li>
             <li><a href="/fixed-expenses" class="active">הוצאות קבועות</a></li>
             <li><a href="/employees">עובדים</a></li>
+            <li><a href="/electricity-history">חשמל</a></li>
         </ul>
     </nav>
     <div class="navbar-end">
@@ -266,15 +287,23 @@ const CATEGORY_HE = {
 function catLabel(cat) { return CATEGORY_HE[cat] || cat; }
 
 let allExpenses = [];
+let elecEstimate = null;
 
 // ── Load ───────────────────────────────────────────────────────
 async function loadExpenses() {
     const kpi   = document.getElementById('kpi-section');
     const tbody = document.getElementById('expenses-tbody');
     try {
-        const res = await fetch('/api/fixed-expenses');
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        allExpenses = await res.json();
+        const [fixedRes, elecRes] = await Promise.all([
+            fetch('/api/fixed-expenses'),
+            fetch('/api/electricity/estimate'),
+        ]);
+        if (!fixedRes.ok) throw new Error(`HTTP ${fixedRes.status}`);
+        allExpenses = await fixedRes.json();
+        if (elecRes.ok) {
+            const elecData = await elecRes.json();
+            elecEstimate = elecData.monthly_estimate;
+        }
         renderKpi(kpi, allExpenses);
         renderTable(tbody, allExpenses);
     } catch (err) {
@@ -298,12 +327,23 @@ function renderKpi(section, expenses) {
 }
 
 function renderTable(tbody, expenses) {
+    const elecRow = `
+        <tr class="elec-row">
+            <td><span class="elec-label">⚡ חשמל (משוער)</span></td>
+            <td class="money" style="color:#fbbf24">
+                ${elecEstimate !== null ? formatMoney(elecEstimate) : '—'}
+            </td>
+            <td style="color:var(--text-muted);font-size:0.8rem">אוטומטי</td>
+            <td style="color:var(--text-muted);font-size:0.8rem">מחושב מחשבון אחרון</td>
+            <td><a href="/electricity-history" class="btn-history">היסטוריה ←</a></td>
+        </tr>`;
+
     if (!expenses.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">אין הוצאות קבועות. לחץ "+ הוסף הוצאה" כדי להוסיף.</td></tr>';
+        tbody.innerHTML = elecRow + '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">אין הוצאות קבועות. לחץ "+ הוסף הוצאה" כדי להוסיף.</td></tr>';
         updateTotals(expenses);
         return;
     }
-    tbody.innerHTML = expenses.map(e => `
+    tbody.innerHTML = elecRow + expenses.map(e => `
         <tr id="row-${e.id}">
             <td>${catLabel(e.category)}</td>
             <td class="money fixed" id="amount-cell-${e.id}">
@@ -327,10 +367,12 @@ function renderTable(tbody, expenses) {
 }
 
 function updateTotals(expenses) {
-    const total = expenses.reduce((s, e) => s + e.amount, 0);
+    const fixedTotal = expenses.reduce((s, e) => s + e.amount, 0);
+    const elecPart   = elecEstimate !== null ? elecEstimate : 0;
+    const total      = fixedTotal + elecPart;
     document.getElementById('expenses-tfoot').innerHTML = `
         <tr>
-            <td>סה"כ</td>
+            <td>סה"כ (כולל חשמל משוער)</td>
             <td class="money" style="color:#c7d2fe">${formatMoney(total)}</td>
             <td colspan="3"></td>
         </tr>`;

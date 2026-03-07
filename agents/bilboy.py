@@ -18,7 +18,7 @@ import requests
 from dotenv import load_dotenv
 
 from agents.base_agent import BaseAgent
-from database.db import insert_expense
+from database.db import get_connection, insert_expense
 
 load_dotenv()
 
@@ -40,7 +40,7 @@ class BilBoyAgent(BaseAgent):
     # Internal API helpers
     # ------------------------------------------------------------------
 
-    def _get(self, path: str, **params) -> dict | list:
+    def _get(self, path: str, params=None) -> dict | list:
         """GET helper that raises PermissionError on 401."""
         url = f"{API_BASE}{path}"
         resp = self._session.get(url, params=params, timeout=30)
@@ -49,29 +49,34 @@ class BilBoyAgent(BaseAgent):
         resp.raise_for_status()
         return resp.json()
 
-    def _get_branch_id(self) -> str:
+    def _get_branch(self) -> tuple[str, list[str]]:
+        """Return (branch_id, supplier_ids) from the first branch."""
         branches = self._get("/user/branches")
         if not branches:
             raise ValueError("No branches returned from BilBoy API")
-        # branches is a list; take the first one
         first = branches[0] if isinstance(branches, list) else branches
-        return str(first.get("branchId") or first.get("id") or first.get("branch_id", ""))
+        branch_id = str(first.get("branchId") or first.get("id") or first.get("branch_id", ""))
+        supplier_ids = [str(s) for s in (first.get("suppliers") or [])]
+        return branch_id, supplier_ids
 
-    def _get_invoice_headers(self, branch_id: str) -> list[dict]:
+    def _get_invoice_headers(self, branch_id: str, supplier_ids: list[str],
+                             from_date: str | None = None,
+                             to_date: str | None = None) -> list[dict]:
         """
-        Fetch document headers for the past 30 days.
+        Fetch document headers for a date range (default: yesterday only).
         Returns a flat list of invoice dicts.
         """
-        today = date.today()
-        from_date = (today - timedelta(days=30)).isoformat()
-        to_date = today.isoformat()
+        if from_date is None or to_date is None:
+            yesterday = date.today() - timedelta(days=1)
+            from_date = from_date or yesterday.isoformat()
+            to_date = to_date or yesterday.isoformat()
 
-        raw = self._get(
-            "/customer/docs/headers",
-            branchId=branch_id,
-            fromDate=from_date,
-            toDate=to_date,
-        )
+        # API requires branches and suppliers as repeated query params
+        params = [("branches", branch_id), ("fromDate", from_date), ("toDate", to_date)]
+        for sid in supplier_ids:
+            params.append(("suppliers", sid))
+
+        raw = self._get("/customer/docs/headers", params=params)
         # API may return a list directly or wrapped in a key
         if isinstance(raw, list):
             return raw
@@ -93,11 +98,23 @@ class BilBoyAgent(BaseAgent):
                 "raw": dict        # full API object kept for debugging
             }
         """
-        branch_id = self._get_branch_id()
-        self.logger.info("[bilboy] Using branch_id=%s", branch_id)
+        branch_id, supplier_ids = self._get_branch()
+        self.logger.info("[bilboy] Using branch_id=%s (%d suppliers)", branch_id, len(supplier_ids))
 
-        invoices = self._get_invoice_headers(branch_id)
-        self.logger.info("[bilboy] Fetched %d invoice headers", len(invoices))
+        all_invoices = self._get_invoice_headers(branch_id, supplier_ids)
+        self.logger.info("[bilboy] Fetched %d invoice headers", len(all_invoices))
+
+        # Filter out franchise fees (זיכיונות המכולת)
+        invoices = []
+        skipped = 0
+        for inv in all_invoices:
+            supplier = inv.get("supplierName") or inv.get("description") or ""
+            if "זיכיונות המכולת" in supplier:
+                skipped += 1
+                continue
+            invoices.append(inv)
+        if skipped:
+            self.logger.info("[bilboy] Skipped %d invoice(s) from זיכיונות המכולת", skipped)
 
         records = []
         for inv in invoices:
@@ -132,8 +149,11 @@ class BilBoyAgent(BaseAgent):
         return records
 
     def save_to_db(self, data: list[dict]) -> None:
-        """Insert each invoice as an expense with category='goods'."""
+        """Insert each invoice as an expense with category='goods', skipping duplicates."""
+        saved = 0
         for record in data:
+            if self._is_duplicate(record):
+                continue
             insert_expense(
                 date=record["date"],
                 category="goods",
@@ -141,7 +161,18 @@ class BilBoyAgent(BaseAgent):
                 description=record["description"],
                 source="bilboy",
             )
-        self.logger.info("[bilboy] Saved %d expense records to DB", len(data))
+            saved += 1
+        self.logger.info("[bilboy] Saved %d expense records to DB (%d skipped as duplicates)",
+                         saved, len(data) - saved)
+
+    @staticmethod
+    def _is_duplicate(record: dict) -> bool:
+        with get_connection() as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM expenses WHERE date=? AND source='bilboy' AND amount=? AND description=?",
+                (record["date"], record["amount"], record["description"]),
+            ).fetchone()[0]
+        return count > 0
 
 
 # ---------------------------------------------------------------------------

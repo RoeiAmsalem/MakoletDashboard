@@ -509,7 +509,10 @@ def calculate_estimated_profit(month: int, year: int) -> dict:
     income = get_total_income(month, year)
     expenses_by_cat = get_total_expenses_by_category(month, year)
     goods = expenses_by_cat.get("goods", 0)
-    electricity = expenses_by_cat.get("electricity", 0)
+
+    # Electricity: use prorated estimate from bill periods, not raw expenses rows
+    elec_data = get_electricity_estimate_for_month(year, month)
+    electricity = elec_data["estimate"] if elec_data else 0
 
     fixed_total = get_total_fixed_expenses()
     fixed_prorated = fixed_total * ratio

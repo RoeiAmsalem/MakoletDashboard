@@ -515,11 +515,11 @@ def calculate_estimated_profit(month: int, year: int) -> dict:
     electricity = elec_data["estimate"] if elec_data else 0
 
     fixed_total = get_total_fixed_expenses()
-    fixed_prorated = fixed_total * ratio
+    fixed_prorated = fixed_total * ratio + electricity
 
     salary = get_total_salary_cost(month, year)
 
-    profit = income - goods - electricity - fixed_prorated - salary
+    profit = income - goods - fixed_prorated - salary
 
     # is_finalized if all active employees have finalized hours this month
     hours_rows = get_employee_hours(month, year)

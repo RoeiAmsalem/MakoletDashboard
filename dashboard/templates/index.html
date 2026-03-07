@@ -132,7 +132,10 @@ function renderKpis(section, d) {
     const profitCardClass = profitPositive ? 'kpi-card--profit' : 'kpi-card--loss';
     const profitValClass  = profitPositive ? 'profit' : 'loss';
     const badgeClass      = d.is_finalized ? 'finalized' : 'estimated';
-    const badgeText       = d.is_finalized ? 'סופי' : 'משוער';
+    const onlyElectricity = !d.income && !d.goods && !d.salary && d.electricity > 0;
+    const badgeText       = d.is_finalized ? 'סופי'
+                          : onlyElectricity ? 'משוער · חשמל בלבד עד היום'
+                          : 'משוער';
     const pct             = Math.min(100, Math.round(d.ratio * 100));
 
     section.innerHTML = `

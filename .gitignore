@@ -33,3 +33,13 @@ yarn-error.log*
 # Testing
 coverage/
 .nyc_output/
+
+# Python
+__pycache__/
+*.pyc
+
+# Database
+*.db
+
+# Data files (PDFs, bills)
+data/

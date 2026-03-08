@@ -2,7 +2,7 @@
 Electricity agent - reads IEC bill emails from Gmail and saves them
 to the expenses table with category='electricity'.
 
-Email source: noreplys@iec.co.il → forwarded to makoletdeshboard@gmail.com
+Email source: noreplys@iec.co.il → forwarded to GMAIL_ADDRESS (.env)
 Contract:     346412955 (must appear in subject; skip 347597870 and others)
 
 Flow per email:

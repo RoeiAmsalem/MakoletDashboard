@@ -9,6 +9,9 @@ Run: python3 scripts/deep_test.py
 import importlib
 import io
 import os
+import re
+import stat
+import subprocess
 import sys
 from datetime import date, datetime
 
@@ -619,11 +622,304 @@ def test_pending_fetches():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 10. SUMMARY
+# 10. AGENT DEEP APPROACH REPORT
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_agent_approach():
+    header(10, "AGENT DEEP APPROACH REPORT")
+
+    # --- BILBOY ---
+    print(f"  {BOLD}{CYAN}BILBOY (goods invoices){RESET}")
+    info("Auth method", "JWT Bearer token via Authorization header")
+    info("Token storage", "BILBOY_TOKEN in .env → os.getenv() → requests.Session header")
+    info("Token renewal", "Manual OTP-based; agent raises PermissionError on 401")
+    print(f"  {BOLD}API flow:{RESET}")
+    info("  Step 1", "GET /user/branches → pick first branch (branchId)")
+    info("  Step 2", "GET /customer/suppliers?customerBranchId=<id>&all=true → all supplier IDs")
+    info("  Step 3", 'Filter out suppliers with title containing "זיכיונות המכולת"')
+    info("  Step 4", "GET /customer/docs/headers?suppliers=<csv>&branches=<id>&from=<dt>&to=<dt>")
+    info("  Step 5", "Parse each invoice: date, totalWithVat, supplierName, refNumber")
+    info("Duplicate detection", "SELECT COUNT(*) WHERE date=? AND source='bilboy' AND amount=? AND description=?")
+    info("On failure", "add_pending_fetch('bilboy', date, error) → retried on next run")
+    info("On success", "resolve_pending_fetch('bilboy', date) for each saved date")
+    info("Date-specific retry", "fetch_data_for_date(date) → API call with specific from/to range")
+    info("DB target", "expenses table: category='goods', source='bilboy'")
+    info("DB fields", "date, category, amount, description, source")
+    print()
+
+    # --- AVIV ALERTS ---
+    print(f"  {BOLD}{CYAN}AVIV ALERTS (daily Z-reports / sales){RESET}")
+    info("Auth method", "Gmail IMAP SSL (port 993) with App Password")
+    info("Credentials", "GMAIL_ADDRESS + GMAIL_APP_PASSWORD from .env")
+    print(f"  {BOLD}Email filter chain:{RESET}")
+    info("  Step 1", 'FROM: AVIV_SENDER_EMAIL (.env)')
+    info("  Step 2", 'SUBJECT: "דוח סוף יום"')
+    info("  Step 3", "SINCE: today's date (DD-Mon-YYYY)")
+    info("  Step 4", "Attachment: content-type application/pdf or application/octet-stream")
+    info("  Step 5", 'Filename must start with "z_" and end with ".pdf"')
+    print(f"  {BOLD}Amount extraction:{RESET}")
+    info("  Source", "PDF only — NEVER trust email subject/filename amounts")
+    info("  RTL regex", r'([\d,]+\.?\d*)\s*₪\s*:כ"הס')
+    info("  LTR fallback", r'סה["׳]כ[:\s]+₪?\s*([\d,]+\.?\d*)')
+    info("  Tool", "pdfplumber → page.extract_text() → regex match")
+    print(f"  {BOLD}Z-report schedule:{RESET}")
+    info("  is_z_expected()", "Sun-Fri: always; Saturday: only if last day of month")
+    info("  check_missing_z_reports()", "Scans past 7 days, checks daily_sales for gaps")
+    info("  Missing dates", "Registered as pending_fetches(agent='aviv_alerts', reason='Z report missing')")
+    info("Duplicate detection", "Implicit — agent only searches today's emails")
+    info("On failure", "add_pending_fetch('aviv_alerts', date, error) → retried on next run")
+    info("On success", "resolve_pending_fetch('aviv_alerts', date)")
+    info("DB target", "daily_sales table: source='aviv'")
+    info("DB fields", "date, total_income, source")
+    print()
+
+    # --- ELECTRICITY ---
+    print(f"  {BOLD}{CYAN}ELECTRICITY (IEC bills){RESET}")
+    info("Auth method", "Gmail IMAP SSL (port 993) with App Password")
+    info("Credentials", "GMAIL_ADDRESS + GMAIL_APP_PASSWORD from .env")
+    print(f"  {BOLD}Email filter chain:{RESET}")
+    info("  Step 1", 'Subject must contain contract "346412955"')
+    info("  Step 2", 'Subject must contain "לתקופה" (billing period)')
+    info("  Step 3", "Subject must NOT contain skip keywords:")
+    info("          ", "שובר תשלום, קבלה, התראה בגין אי תשלום, הודעה על העברת חוב,")
+    info("          ", "אישור החלפת לקוחות, אישור הצטרפות")
+    print(f"  {BOLD}Date parsing:{RESET}")
+    info("  Subject format", "לתקופה - DD/MM/YYYY - DD/MM/YYYY (END first, then START)")
+    info("  Regex", r"לתקופה - (\d{2}/\d{2}/\d{4}) - (\d{2}/\d{2}/\d{4})")
+    print(f"  {BOLD}Amount extraction:{RESET}")
+    info("  Source", "PDF attachment via pdfplumber")
+    info("  RTL regex", r'([\d,]+\.?\d*)\s+ןובשח תפוקתל מ"עמ ללוכ כ"הס')
+    info("  PDF filename", r"^\d{4}-\d+_\d{8}_\d{6}\.pdf$ (IEC naming convention)")
+    info("Correction detection", "is_correction = True when billing_days > 90")
+    info("PDF storage", "Saved to data/electricity_bills/<filename>.pdf")
+    info("Duplicate detection", "SELECT COUNT(*) WHERE category='electricity' AND pdf_filename=?")
+    info("On failure", "add_pending_fetch('electricity', date, error) via BaseAgent")
+    info("DB target", "expenses table: category='electricity', source='iec'")
+    info("DB fields", "date, amount, description, period_start, period_end, billing_days, is_correction, pdf_filename")
+    print()
+
+    # --- EMPLOYEE HOURS ---
+    print(f"  {BOLD}{CYAN}EMPLOYEE HOURS (monthly attendance){RESET}")
+    info("Auth method", "Gmail IMAP SSL (port 993) with App Password")
+    info("Credentials", "GMAIL_ADDRESS + GMAIL_APP_PASSWORD + AVIV_SENDER_EMAIL from .env")
+    print(f"  {BOLD}Email filter chain:{RESET}")
+    info("  Step 1", "FROM: AVIV_SENDER_EMAIL")
+    info("  Step 2", 'SUBJECT: "נוכחות באקסל"')
+    info("  Step 3", "SINCE: 1st of current month")
+    info("  Step 4", 'Attachment: CSV filename starts with "דוח שעון נוכחות מפורט_XL_"')
+    print(f"  {BOLD}CSV parsing:{RESET}")
+    info("  Employee row", r"^\d+\s+(.+)$ → captures Hebrew name")
+    info("  Summary row", "סה''כ שורות → last non-empty column = HH:MM total")
+    info("  Time conversion", "HH:MM → decimal (e.g. 33:47 → 33.783)")
+    info("  Encoding", "Tries: utf-8-sig, utf-8, cp1255, iso-8859-8")
+    info("Name matching", "employees.name must match CSV name exactly")
+    info("is_finalized", "Always True when saved from CSV (confirmed hours)")
+    info("Schedule guard", "Only runs on days 1-5 of month; skips if already finalized")
+    info("On failure", "add_pending_fetch('employee_hours', date, error) via BaseAgent")
+    info("DB target", "employee_hours table via upsert_employee_hours()")
+    info("DB fields", "employee_id, month, year, hours_worked, is_finalized")
+
+    results["Agent Approach Report"] = "pass"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 11. DEEP SECURITY AUDIT
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_security():
+    header(11, "DEEP SECURITY AUDIT")
+
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    passed = 0
+    total = 10
+
+    # --- 1. .env not in git ---
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", ".env"],
+            capture_output=True, text=True, cwd=project_root,
+        ).stdout.strip()
+        ok = out == ""
+        passed += check("1. .env not tracked in git", ok,
+                        "EXPOSED!" if not ok else "correctly gitignored")
+    except Exception as e:
+        check("1. .env not tracked in git", False, str(e))
+
+    # --- 2. .gitignore coverage ---
+    gitignore_path = os.path.join(project_root, ".gitignore")
+    required_patterns = [".env", "*.db", "data/", "__pycache__"]
+    if os.path.isfile(gitignore_path):
+        with open(gitignore_path) as f:
+            gitignore_content = f.read()
+        missing = [p for p in required_patterns if p not in gitignore_content]
+        ok = len(missing) == 0
+        detail = f"missing: {', '.join(missing)}" if missing else "all present"
+        passed += check("2. .gitignore coverage", ok, detail)
+    else:
+        check("2. .gitignore coverage", False, ".gitignore not found")
+
+    # --- 3. No hardcoded credentials in source ---
+    cred_patterns = [
+        (re.compile(r'[a-zA-Z0-9_-]{50,}'), "long token/key"),
+        (re.compile(r'\d{8,12}:AA[A-Za-z0-9_-]{30,}'), "Telegram bot token"),
+        (re.compile(r'[a-z]{16}', re.IGNORECASE), None),  # check below
+    ]
+    # Load actual secrets from .env for comparison
+    env_path = os.path.join(project_root, ".env")
+    actual_secrets = []
+    if os.path.isfile(env_path):
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if "=" in line and not line.startswith("#"):
+                    val = line.split("=", 1)[1].strip().strip("'\"")
+                    if len(val) >= 10:
+                        actual_secrets.append(val)
+
+    hardcoded_found = []
+    py_files = []
+    for dirpath, _, filenames in os.walk(project_root):
+        if "__pycache__" in dirpath or ".git" in dirpath:
+            continue
+        for fn in filenames:
+            if fn.endswith(".py"):
+                full = os.path.join(dirpath, fn)
+                rel = os.path.relpath(full, project_root)
+                # Skip test files and .env itself
+                if rel.startswith("tests/") or rel.startswith("scripts/debug"):
+                    continue
+                py_files.append((rel, full))
+
+    for rel, full in py_files:
+        with open(full) as f:
+            content = f.read()
+        for secret in actual_secrets:
+            if secret in content:
+                hardcoded_found.append(f"{rel}: contains actual secret value")
+                break
+
+    ok = len(hardcoded_found) == 0
+    detail = "; ".join(hardcoded_found[:3]) if hardcoded_found else "clean"
+    passed += check("3. No hardcoded credentials in .py", ok, detail)
+
+    # --- 4. Flask auth enforced ---
+    try:
+        from dashboard.app import app
+        client = app.test_client()
+        protected_routes = ["/", "/fixed-expenses", "/employees", "/electricity-history"]
+        auth_ok = True
+        auth_details = []
+        for route in protected_routes:
+            resp = client.get(route)
+            # Should redirect (302) or return non-200 without login
+            if resp.status_code == 200:
+                auth_ok = False
+                auth_details.append(f"{route} returned 200 without auth")
+        ok = auth_ok
+        detail = "; ".join(auth_details) if auth_details else "all routes require login"
+        passed += check("4. Flask auth enforced (no login)", ok, detail)
+    except Exception as e:
+        check("4. Flask auth enforced", False, str(e))
+
+    # --- 5. DB file not in git ---
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "*.db", "database/*.db"],
+            capture_output=True, text=True, cwd=project_root,
+        ).stdout.strip()
+        ok = out == ""
+        passed += check("5. DB file not tracked in git", ok,
+                        f"TRACKED: {out}" if not ok else "clean")
+    except Exception as e:
+        check("5. DB file not tracked in git", False, str(e))
+
+    # --- 6. Sensitive data folders not in git ---
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "data/"],
+            capture_output=True, text=True, cwd=project_root,
+        ).stdout.strip()
+        ok = out == ""
+        passed += check("6. data/ folder not tracked in git", ok,
+                        f"TRACKED: {out[:100]}" if not ok else "clean")
+    except Exception as e:
+        check("6. data/ folder not tracked", False, str(e))
+
+    # --- 7. No credentials in git history (commit messages) ---
+    try:
+        out = subprocess.run(
+            ["git", "log", "--all", "--oneline", "-20"],
+            capture_output=True, text=True, cwd=project_root,
+        ).stdout.lower()
+        suspect_words = ["password", "token", "secret", "api_key", "apikey"]
+        found_words = [w for w in suspect_words if w in out]
+        ok = len(found_words) == 0
+        if ok:
+            passed += 1
+        detail = f"found: {', '.join(found_words)}" if found_words else "clean"
+        status = PASS if ok else WARN
+        suffix = f"  {DIM}({detail}){RESET}"
+        print(f"  {'[' + status + ']':<20s} 7. No credential keywords in commit messages{suffix}")
+    except Exception as e:
+        check("7. No credentials in commit messages", False, str(e))
+
+    # --- 8. .env file permissions ---
+    if os.path.isfile(env_path):
+        file_stat = os.stat(env_path)
+        mode = stat.S_IMODE(file_stat.st_mode)
+        mode_str = oct(mode)
+        # 0o600 = owner read/write only
+        ok = mode <= 0o600
+        if ok:
+            passed += 1
+        status = PASS if ok else WARN
+        detail = f"mode={mode_str}" + ("" if ok else " (recommend chmod 600)")
+        suffix = f"  {DIM}({detail}){RESET}"
+        print(f"  {'[' + status + ']':<20s} 8. .env file permissions{suffix}")
+    else:
+        check("8. .env file permissions", False, ".env not found")
+
+    # --- 9. Telegram token not hardcoded ---
+    telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    token_found = []
+    if telegram_token:
+        for rel, full in py_files:
+            with open(full) as f:
+                if telegram_token in f.read():
+                    token_found.append(rel)
+    ok = len(token_found) == 0
+    detail = f"FOUND IN: {', '.join(token_found)}" if token_found else "clean"
+    passed += check("9. Telegram token not hardcoded", ok, detail)
+
+    # --- 10. IMAP credentials not in source ---
+    gmail_addr = os.getenv("GMAIL_ADDRESS", "")
+    gmail_pass = os.getenv("GMAIL_APP_PASSWORD", "")
+    imap_found = []
+    for rel, full in py_files:
+        with open(full) as f:
+            content = f.read()
+        if gmail_addr and gmail_addr in content:
+            imap_found.append(f"{rel}: Gmail address")
+        if gmail_pass and gmail_pass in content:
+            imap_found.append(f"{rel}: App password")
+    ok = len(imap_found) == 0
+    detail = f"FOUND: {'; '.join(imap_found)}" if imap_found else "clean"
+    passed += check("10. IMAP credentials not in source", ok, detail)
+
+    # --- Final score ---
+    print()
+    color = GREEN if passed == total else (YELLOW if passed >= 7 else RED)
+    print(f"  {BOLD}Security score: {color}{passed}/{total} checks passed{RESET}")
+
+    results["Security Audit"] = "pass" if passed == total else ("warn" if passed >= 7 else "fail")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 12. SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════
 
 def print_summary():
-    header(10, "SUMMARY")
+    header(12, "SUMMARY")
 
     icon = {"pass": f"{GREEN}PASS{RESET}", "fail": f"{RED}FAIL{RESET}", "warn": f"{YELLOW}WARN{RESET}"}
     max_len = max(len(k) for k in results)
@@ -666,4 +962,6 @@ if __name__ == "__main__":
     test_flask()
     test_data_integrity()
     test_pending_fetches()
+    test_agent_approach()
+    test_security()
     print_summary()

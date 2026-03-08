@@ -1,5 +1,5 @@
 """
-Tests for notifications/whatsapp.py.
+Tests for notifications/whatsapp.py (Telegram-based notifications).
 All HTTP calls and environment reads are mocked.
 """
 
@@ -20,8 +20,8 @@ _ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _mock_env(phone="972501234567", api_key="abc123"):
-    return patch.dict(os.environ, {"WHATSAPP_PHONE": phone, "WHATSAPP_API_KEY": api_key})
+def _mock_env(token="fake-bot-token", chat_id="123456"):
+    return patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": token, "TELEGRAM_CHAT_ID": chat_id})
 
 
 def _mock_time(hour: int):
@@ -76,25 +76,25 @@ class TestIsSendWindow(unittest.TestCase):
 
 class TestSendAlertCredentials(unittest.TestCase):
     @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_skips_when_no_phone(self, mock_get, _):
-        with patch.dict(os.environ, {"WHATSAPP_PHONE": "", "WHATSAPP_API_KEY": "key"}):
+    @patch("notifications.whatsapp.requests.post")
+    def test_skips_when_no_token(self, mock_post, _):
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": "123"}):
             send_alert("test")
-        mock_get.assert_not_called()
+        mock_post.assert_not_called()
 
     @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_skips_when_no_api_key(self, mock_get, _):
-        with patch.dict(os.environ, {"WHATSAPP_PHONE": "972501234567", "WHATSAPP_API_KEY": ""}):
+    @patch("notifications.whatsapp.requests.post")
+    def test_skips_when_no_chat_id(self, mock_post, _):
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "tok", "TELEGRAM_CHAT_ID": ""}):
             send_alert("test")
-        mock_get.assert_not_called()
+        mock_post.assert_not_called()
 
     @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_skips_when_both_missing(self, mock_get, _):
-        with patch.dict(os.environ, {"WHATSAPP_PHONE": "", "WHATSAPP_API_KEY": ""}):
+    @patch("notifications.whatsapp.requests.post")
+    def test_skips_when_both_missing(self, mock_post, _):
+        with patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "", "TELEGRAM_CHAT_ID": ""}):
             send_alert("test")
-        mock_get.assert_not_called()
+        mock_post.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -103,19 +103,19 @@ class TestSendAlertCredentials(unittest.TestCase):
 
 class TestSendAlertTimeWindow(unittest.TestCase):
     @patch("notifications.whatsapp._is_send_window", return_value=False)
-    @patch("notifications.whatsapp.requests.get")
-    def test_does_not_send_outside_window(self, mock_get, _):
+    @patch("notifications.whatsapp.requests.post")
+    def test_does_not_send_outside_window(self, mock_post, _):
         with _mock_env():
             send_alert("test message")
-        mock_get.assert_not_called()
+        mock_post.assert_not_called()
 
     @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_sends_inside_window(self, mock_get, _):
-        mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+    @patch("notifications.whatsapp.requests.post")
+    def test_sends_inside_window(self, mock_post, _):
+        mock_post.return_value = MagicMock(status_code=200)
         with _mock_env():
             send_alert("hello")
-        mock_get.assert_called_once()
+        mock_post.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -124,49 +124,48 @@ class TestSendAlertTimeWindow(unittest.TestCase):
 
 class TestSendAlertHTTPRequest(unittest.TestCase):
     @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_url_contains_phone(self, mock_get, _):
-        mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-        with _mock_env(phone="972501234567"):
+    @patch("notifications.whatsapp.requests.post")
+    def test_url_contains_token(self, mock_post, _):
+        mock_post.return_value = MagicMock(status_code=200)
+        with _mock_env(token="my-bot-token"):
             send_alert("msg")
-        url = mock_get.call_args.args[0]
-        self.assertIn("972501234567", url)
+        url = mock_post.call_args.args[0]
+        self.assertIn("my-bot-token", url)
 
     @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_url_contains_apikey(self, mock_get, _):
-        mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-        with _mock_env(api_key="mykey"):
-            send_alert("msg")
-        url = mock_get.call_args.args[0]
-        self.assertIn("mykey", url)
-
-    @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_message_is_url_encoded(self, mock_get, _):
-        mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
-        with _mock_env():
-            send_alert("hello world & more")
-        url = mock_get.call_args.args[0]
-        self.assertIn("hello+world", url.replace("%20", "+").replace(" ", "+"))
-        self.assertNotIn(" ", url)
-
-    @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_uses_callmebot_base_url(self, mock_get, _):
-        mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+    @patch("notifications.whatsapp.requests.post")
+    def test_url_uses_telegram_api(self, mock_post, _):
+        mock_post.return_value = MagicMock(status_code=200)
         with _mock_env():
             send_alert("msg")
-        url = mock_get.call_args.args[0]
-        self.assertIn("callmebot.com/whatsapp.php", url)
+        url = mock_post.call_args.args[0]
+        self.assertIn("api.telegram.org/bot", url)
 
     @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_timeout_set(self, mock_get, _):
-        mock_get.return_value = MagicMock(status_code=200, raise_for_status=MagicMock())
+    @patch("notifications.whatsapp.requests.post")
+    def test_payload_contains_chat_id(self, mock_post, _):
+        mock_post.return_value = MagicMock(status_code=200)
+        with _mock_env(chat_id="999"):
+            send_alert("msg")
+        payload = mock_post.call_args.kwargs.get("json", {})
+        self.assertEqual(payload["chat_id"], "999")
+
+    @patch("notifications.whatsapp._is_send_window", return_value=True)
+    @patch("notifications.whatsapp.requests.post")
+    def test_payload_contains_message(self, mock_post, _):
+        mock_post.return_value = MagicMock(status_code=200)
+        with _mock_env():
+            send_alert("hello world")
+        payload = mock_post.call_args.kwargs.get("json", {})
+        self.assertEqual(payload["text"], "hello world")
+
+    @patch("notifications.whatsapp._is_send_window", return_value=True)
+    @patch("notifications.whatsapp.requests.post")
+    def test_timeout_set(self, mock_post, _):
+        mock_post.return_value = MagicMock(status_code=200)
         with _mock_env():
             send_alert("msg")
-        kwargs = mock_get.call_args.kwargs
+        kwargs = mock_post.call_args.kwargs
         self.assertIn("timeout", kwargs)
         self.assertGreater(kwargs["timeout"], 0)
 
@@ -177,10 +176,10 @@ class TestSendAlertHTTPRequest(unittest.TestCase):
 
 class TestSendAlertErrorHandling(unittest.TestCase):
     @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_no_exception_on_http_error(self, mock_get, _):
+    @patch("notifications.whatsapp.requests.post")
+    def test_no_exception_on_http_error(self, mock_post, _):
         import requests as req
-        mock_get.side_effect = req.RequestException("timeout")
+        mock_post.side_effect = req.RequestException("timeout")
         with _mock_env():
             try:
                 send_alert("msg")  # must not raise
@@ -188,10 +187,10 @@ class TestSendAlertErrorHandling(unittest.TestCase):
                 self.fail(f"send_alert raised unexpectedly: {exc}")
 
     @patch("notifications.whatsapp._is_send_window", return_value=True)
-    @patch("notifications.whatsapp.requests.get")
-    def test_no_exception_on_connection_error(self, mock_get, _):
+    @patch("notifications.whatsapp.requests.post")
+    def test_no_exception_on_connection_error(self, mock_post, _):
         import requests as req
-        mock_get.side_effect = req.exceptions.ConnectionError("refused")
+        mock_post.side_effect = req.exceptions.ConnectionError("refused")
         with _mock_env():
             try:
                 send_alert("msg")

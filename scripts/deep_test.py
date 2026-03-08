@@ -369,29 +369,29 @@ def test_notifications():
     from notifications.whatsapp import send_alert, _is_send_window
 
     ok = True
-    phone = os.getenv("WHATSAPP_PHONE", "").strip()
-    api_key = os.getenv("WHATSAPP_API_KEY", "").strip()
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = os.getenv("TELEGRAM_CHAT_ID", "").strip()
 
-    info("WhatsApp phone", phone if phone else "(not set)")
-    info("API key", "set" if api_key else "(not set)")
+    info("Telegram bot token", "set" if token else "(not set)")
+    info("Telegram chat ID", chat_id if chat_id else "(not set)")
     info("Time restriction", "08:00-22:00 Israel time")
     info("Currently in window", "yes" if _is_send_window() else "no")
     print()
 
-    ok &= check("WHATSAPP_PHONE set", bool(phone))
-    ok &= check("WHATSAPP_API_KEY set", bool(api_key))
+    ok &= check("TELEGRAM_BOT_TOKEN set", bool(token))
+    ok &= check("TELEGRAM_CHAT_ID set", bool(chat_id))
 
-    if phone and api_key:
+    if token and chat_id:
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         try:
             send_alert(f"🧪 MakoletDashboard deep test - {now_str}")
-            ok &= check("Send test WhatsApp", True, "message sent (or outside window)")
+            ok &= check("Send test Telegram", True, "message sent (or outside window)")
         except Exception as e:
-            ok &= check("Send test WhatsApp", False, str(e))
+            ok &= check("Send test Telegram", False, str(e))
     else:
         info("Send test", "skipped (credentials missing)")
 
-    results["Notifications"] = "pass" if ok else ("warn" if not api_key else "fail")
+    results["Notifications"] = "pass" if ok else ("warn" if not token else "fail")
 
 
 # ═══════════════════════════════════════════════════════════════════════════

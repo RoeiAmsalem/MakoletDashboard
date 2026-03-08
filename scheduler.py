@@ -16,9 +16,10 @@ from datetime import date
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from agents.bilboy import BilBoyAgent
-from agents.aviv_alerts import AvivAlertsAgent
+from agents.aviv_alerts import AvivAlertsAgent, check_missing_z_reports
 from agents.employee_hours import EmployeeHoursAgent
 from database.db import init_db, get_connection
+from notifications.whatsapp import send_alert
 
 logging.basicConfig(
     level=logging.INFO,
@@ -74,6 +75,15 @@ def nightly_job():
 
     _run_agent(BilBoyAgent())
     _run_agent(AvivAlertsAgent())
+
+    # Check for missing Z-reports in the past 7 days
+    missing = check_missing_z_reports()
+    if missing:
+        for d in missing:
+            logger.warning("[scheduler] Missing Z-report for %s", d)
+            send_alert(f"⚠️ דוח Z חסר לתאריך {d}")
+    else:
+        logger.info("[scheduler] No missing Z-reports in the past 7 days")
 
     # employee_hours: only on days 1-5 AND not yet finalized
     if today.day <= 5:

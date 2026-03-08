@@ -6,8 +6,7 @@ Flow:
     Connect to Gmail via IMAP (imap.gmail.com:993 SSL)
     Search for today's email from AVIV_SENDER_EMAIL with subject "דוח סוף יום"
     Download the PDF attachment (filename starts with "z_")
-    Extract text with pdfplumber
-    Parse: סה"כ: ₪ <amount>
+    Extract amount from PDF with pdfplumber (NEVER trust email subject amounts)
     Save to daily_sales
 
 Credentials from .env:
@@ -16,26 +15,82 @@ Credentials from .env:
     AVIV_SENDER_EMAIL    - Sender address of the Aviv daily report
 """
 
+import calendar
 import email
+import email.header
 import imaplib
 import io
 import os
 import re
-from datetime import date
+from datetime import date, timedelta
 
 import pdfplumber
 from dotenv import load_dotenv
 
 from agents.base_agent import BaseAgent
-from database.db import insert_daily_sale
+from database.db import get_connection, insert_daily_sale
 
 load_dotenv()
 
 IMAP_HOST = "imap.gmail.com"
 IMAP_PORT = 993
 
-# Regex to extract the total from: סה"כ: ₪ 12377.92
-TOTAL_PATTERN = re.compile(r'סה"כ[:\s]+₪?\s*([\d,]+\.?\d*)')
+# RTL PDF text renders as: "20295.85 ₪ :כ"הס"
+# This regex matches the main total line (with colon before כ"הס)
+TOTAL_PATTERN_RTL = re.compile(r'([\d,]+\.?\d*)\s*₪\s*:כ"הס')
+# Fallback for non-RTL PDFs: סה"כ: ₪ 12377.92
+TOTAL_PATTERN_LTR = re.compile(r'סה["\u05f4]כ[:\s]+₪?\s*([\d,]+\.?\d*)')
+
+
+def _decode_filename(raw: str) -> str:
+    """Decode a possibly MIME-encoded filename."""
+    if not raw:
+        return ""
+    parts = email.header.decode_header(raw)
+    result = ""
+    for part, enc in parts:
+        if isinstance(part, bytes):
+            result += part.decode(enc or "utf-8", errors="replace")
+        else:
+            result += part
+    return result.strip()
+
+
+def is_z_expected(d: date) -> bool:
+    """
+    Return True if a Z-report is expected for the given date.
+
+    Schedule:
+    - Sunday–Friday (weekday 6, 0–4): always expected
+    - Saturday (weekday 5): only if it's the last day of the month
+    """
+    if d.weekday() != 5:  # Not Saturday
+        return True
+    # Saturday: only expected on last day of month
+    last_day = calendar.monthrange(d.year, d.month)[1]
+    return d.day == last_day
+
+
+def check_missing_z_reports() -> list[str]:
+    """
+    Check the past 7 days for missing Z-reports.
+    Returns a list of date strings (YYYY-MM-DD) where a report was expected
+    but no daily_sales record exists.
+    """
+    today = date.today()
+    missing = []
+    with get_connection() as conn:
+        for i in range(1, 8):  # yesterday through 7 days ago
+            d = today - timedelta(days=i)
+            if not is_z_expected(d):
+                continue
+            count = conn.execute(
+                "SELECT COUNT(*) FROM daily_sales WHERE date = ?",
+                (d.isoformat(),),
+            ).fetchone()[0]
+            if count == 0:
+                missing.append(d.isoformat())
+    return missing
 
 
 class AvivAlertsAgent(BaseAgent):
@@ -75,6 +130,7 @@ class AvivAlertsAgent(BaseAgent):
     def _fetch_pdf_attachment(self, mail: imaplib.IMAP4_SSL, msg_id: bytes) -> bytes | None:
         """
         Fetch the first PDF attachment whose filename starts with 'z_'.
+        Handles both application/pdf and application/octet-stream content types.
         Returns raw PDF bytes or None if not found.
         """
         status, msg_data = mail.fetch(msg_id, "(RFC822)")
@@ -85,23 +141,32 @@ class AvivAlertsAgent(BaseAgent):
         msg = email.message_from_bytes(raw_email)
 
         for part in msg.walk():
-            if part.get_content_type() != "application/pdf":
+            ct = part.get_content_type()
+            if ct not in ("application/pdf", "application/octet-stream"):
                 continue
-            filename = part.get_filename() or ""
-            if filename.lower().startswith("z_"):
+            raw_fn = part.get_filename() or ""
+            filename = _decode_filename(raw_fn)
+            if filename.lower().startswith("z_") and filename.lower().endswith(".pdf"):
                 return part.get_payload(decode=True)
 
         return None
 
     def _extract_total_from_pdf(self, pdf_bytes: bytes) -> float | None:
-        """Parse PDF bytes and extract the סה"כ total."""
+        """
+        Parse PDF bytes and extract the סה"כ total.
+        Tries RTL pattern first (pdfplumber visual order), then LTR fallback.
+        """
         with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
             for page in pdf.pages:
                 text = page.extract_text() or ""
-                match = TOTAL_PATTERN.search(text)
+                # RTL pattern: "20295.85 ₪ :כ"הס"
+                match = TOTAL_PATTERN_RTL.search(text)
                 if match:
-                    amount_str = match.group(1).replace(",", "")
-                    return float(amount_str)
+                    return float(match.group(1).replace(",", ""))
+                # LTR fallback: 'סה"כ: ₪ 12377.92'
+                match = TOTAL_PATTERN_LTR.search(text)
+                if match:
+                    return float(match.group(1).replace(",", ""))
         return None
 
     # ------------------------------------------------------------------

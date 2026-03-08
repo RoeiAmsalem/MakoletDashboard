@@ -238,3 +238,137 @@ class TestSaveToDb:
         with patch("agents.aviv_alerts.insert_daily_sale") as mock_insert:
             agent.save_to_db([])
         mock_insert.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# RTL PDF extraction
+# ---------------------------------------------------------------------------
+
+class TestExtractTotalRTL:
+    """Tests for RTL PDF text (pdfplumber visual order)."""
+
+    def test_parses_rtl_total(self, agent):
+        fake_page = MagicMock()
+        fake_page.extract_text.return_value = '20295.85 ₪ :כ"הס'
+        fake_pdf = MagicMock()
+        fake_pdf.pages = [fake_page]
+        fake_pdf.__enter__ = lambda s: s
+        fake_pdf.__exit__ = MagicMock(return_value=False)
+
+        with patch("pdfplumber.open", return_value=fake_pdf):
+            result = agent._extract_total_from_pdf(b"fake-pdf-bytes")
+
+        assert result == 20295.85
+
+    def test_parses_rtl_with_commas(self, agent):
+        fake_page = MagicMock()
+        fake_page.extract_text.return_value = '1,234.56 ₪ :כ"הס'
+        fake_pdf = MagicMock()
+        fake_pdf.pages = [fake_page]
+        fake_pdf.__enter__ = lambda s: s
+        fake_pdf.__exit__ = MagicMock(return_value=False)
+
+        with patch("pdfplumber.open", return_value=fake_pdf):
+            result = agent._extract_total_from_pdf(b"fake-pdf-bytes")
+
+        assert result == 1234.56
+
+    def test_rtl_preferred_over_ltr(self, agent):
+        """When both patterns exist, RTL match is found first."""
+        fake_page = MagicMock()
+        fake_page.extract_text.return_value = '20295.85 ₪ :כ"הס\nסה"כ: ₪ 999.00'
+        fake_pdf = MagicMock()
+        fake_pdf.pages = [fake_page]
+        fake_pdf.__enter__ = lambda s: s
+        fake_pdf.__exit__ = MagicMock(return_value=False)
+
+        with patch("pdfplumber.open", return_value=fake_pdf):
+            result = agent._extract_total_from_pdf(b"fake-pdf-bytes")
+
+        assert result == 20295.85
+
+
+# ---------------------------------------------------------------------------
+# is_z_expected
+# ---------------------------------------------------------------------------
+
+class TestIsZExpected:
+    def test_sunday_expected(self):
+        from agents.aviv_alerts import is_z_expected
+        # 2026-03-08 is Sunday
+        assert is_z_expected(date(2026, 3, 8)) is True
+
+    def test_weekday_expected(self):
+        from agents.aviv_alerts import is_z_expected
+        # Monday through Friday
+        assert is_z_expected(date(2026, 3, 9)) is True   # Mon
+        assert is_z_expected(date(2026, 3, 13)) is True  # Fri
+
+    def test_saturday_not_expected(self):
+        from agents.aviv_alerts import is_z_expected
+        # 2026-03-07 is Saturday, not last day of month
+        assert is_z_expected(date(2026, 3, 7)) is False
+
+    def test_saturday_last_day_of_month_expected(self):
+        from agents.aviv_alerts import is_z_expected
+        # Find a Saturday that's the last day of a month
+        # 2026-01-31 is Saturday
+        assert is_z_expected(date(2026, 1, 31)) is True
+
+    def test_saturday_not_last_day(self):
+        from agents.aviv_alerts import is_z_expected
+        # 2026-03-14 is Saturday, not last day
+        assert is_z_expected(date(2026, 3, 14)) is False
+
+
+# ---------------------------------------------------------------------------
+# check_missing_z_reports
+# ---------------------------------------------------------------------------
+
+class TestCheckMissingZReports:
+    def test_no_missing_when_all_present(self):
+        from agents.aviv_alerts import check_missing_z_reports
+        today = date(2026, 3, 8)  # Sunday
+        # Mock: all expected days have records
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = lambda s: s
+        mock_conn.__exit__ = MagicMock(return_value=False)
+        mock_cursor = MagicMock()
+        mock_cursor.fetchone.return_value = (1,)  # always found
+        mock_conn.execute.return_value = mock_cursor
+
+        with patch("agents.aviv_alerts.date") as mock_date, \
+             patch("agents.aviv_alerts.get_connection", return_value=mock_conn):
+            mock_date.today.return_value = today
+            mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
+            missing = check_missing_z_reports()
+
+        assert missing == []
+
+    def test_detects_missing_day(self):
+        from agents.aviv_alerts import check_missing_z_reports
+        today = date(2026, 3, 8)  # Sunday
+
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = lambda s: s
+        mock_conn.__exit__ = MagicMock(return_value=False)
+
+        def fake_execute(sql, params):
+            cursor = MagicMock()
+            d = params[0]
+            # Mar 7 is Saturday (skip), Mar 2 missing, rest present
+            if d == "2026-03-02":
+                cursor.fetchone.return_value = (0,)
+            else:
+                cursor.fetchone.return_value = (1,)
+            return cursor
+
+        mock_conn.execute.side_effect = fake_execute
+
+        with patch("agents.aviv_alerts.date") as mock_date, \
+             patch("agents.aviv_alerts.get_connection", return_value=mock_conn):
+            mock_date.today.return_value = today
+            mock_date.side_effect = lambda *a, **kw: date(*a, **kw)
+            missing = check_missing_z_reports()
+
+        assert "2026-03-02" in missing

@@ -485,6 +485,52 @@ def get_last_agent_run(agent_name: str) -> sqlite3.Row | None:
 
 
 # ---------------------------------------------------------------------------
+# pending_fetches
+# ---------------------------------------------------------------------------
+
+def add_pending_fetch(agent: str, date_str: str, reason: str = None) -> int:
+    """Add a pending fetch. Uses INSERT OR IGNORE to respect UNIQUE(agent, date)."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO pending_fetches (agent, date, reason, attempts)
+               VALUES (?, ?, ?, 0)""",
+            (agent, date_str, reason),
+        )
+        return cur.lastrowid
+
+
+def resolve_pending_fetch(agent: str, date_str: str) -> None:
+    """Mark a pending fetch as resolved."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE pending_fetches SET resolved_at = datetime('now') WHERE agent = ? AND date = ? AND resolved_at IS NULL",
+            (agent, date_str),
+        )
+
+
+def get_pending_fetches(agent: str = None) -> list[sqlite3.Row]:
+    """Return all unresolved pending fetches, optionally filtered by agent."""
+    with get_connection() as conn:
+        if agent:
+            return conn.execute(
+                "SELECT * FROM pending_fetches WHERE agent = ? AND resolved_at IS NULL ORDER BY date",
+                (agent,),
+            ).fetchall()
+        return conn.execute(
+            "SELECT * FROM pending_fetches WHERE resolved_at IS NULL ORDER BY agent, date"
+        ).fetchall()
+
+
+def increment_pending_attempt(agent: str, date_str: str) -> None:
+    """Increment the attempt counter and update last_attempt_at."""
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE pending_fetches SET attempts = attempts + 1, last_attempt_at = datetime('now') WHERE agent = ? AND date = ? AND resolved_at IS NULL",
+            (agent, date_str),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Profit calculation helper
 # ---------------------------------------------------------------------------
 

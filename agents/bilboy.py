@@ -18,7 +18,7 @@ import requests
 from dotenv import load_dotenv
 
 from agents.base_agent import BaseAgent
-from database.db import get_connection, insert_expense
+from database.db import get_connection, insert_expense, add_pending_fetch, resolve_pending_fetch
 
 load_dotenv()
 
@@ -109,17 +109,9 @@ class BilBoyAgent(BaseAgent):
     # BaseAgent interface
     # ------------------------------------------------------------------
 
-    def fetch_data(self) -> list[dict]:
+    def _fetch_invoices(self, from_date: str = None, to_date: str = None) -> list[dict]:
         """
-        Run the BilBoy API flow and return a list of invoice records.
-
-        Each record:
-            {
-                "date": "YYYY-MM-DD",
-                "amount": float,
-                "description": str,
-                "raw": dict        # full API object kept for debugging
-            }
+        Core invoice fetching logic. Used by both fetch_data() and fetch_data_for_date().
         """
         branch_id = self._get_branch_id()
         self.logger.info("[bilboy] Using branch_id=%s", branch_id)
@@ -131,7 +123,8 @@ class BilBoyAgent(BaseAgent):
             self.logger.warning("[bilboy] No supplier IDs found")
             return []
 
-        invoices = self._get_invoice_headers(branch_id, suppliers_csv)
+        invoices = self._get_invoice_headers(branch_id, suppliers_csv,
+                                              from_date=from_date, to_date=to_date)
         self.logger.info("[bilboy] Fetched %d invoice headers", len(invoices))
 
         records = []
@@ -151,9 +144,22 @@ class BilBoyAgent(BaseAgent):
             )
         return records
 
+    def fetch_data(self) -> list[dict]:
+        """
+        Run the BilBoy API flow for yesterday (default date range).
+        """
+        return self._fetch_invoices()
+
+    def fetch_data_for_date(self, target_date: str) -> list[dict]:
+        """
+        Fetch invoices for a specific date (used for pending retries).
+        """
+        return self._fetch_invoices(from_date=target_date, to_date=target_date)
+
     def save_to_db(self, data: list[dict]) -> None:
         """Insert each invoice as an expense with category='goods', skipping duplicates."""
         saved = 0
+        saved_dates = set()
         for record in data:
             if self._is_duplicate(record):
                 continue
@@ -165,6 +171,10 @@ class BilBoyAgent(BaseAgent):
                 source="bilboy",
             )
             saved += 1
+            saved_dates.add(record["date"])
+        # Resolve any pending fetches for dates we successfully saved
+        for d in saved_dates:
+            resolve_pending_fetch("bilboy", d)
         self.logger.info("[bilboy] Saved %d expense records to DB (%d skipped as duplicates)",
                          saved, len(data) - saved)
 

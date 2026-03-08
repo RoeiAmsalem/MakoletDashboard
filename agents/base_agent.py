@@ -13,7 +13,10 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import date
 
-from database.db import log_agent_run
+from database.db import (
+    log_agent_run, add_pending_fetch, resolve_pending_fetch,
+    get_pending_fetches, increment_pending_attempt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +61,19 @@ class BaseAgent(ABC):
     # run() — the main entry point, called by scheduler / run_all_agents
     # ------------------------------------------------------------------
 
+    def fetch_data_for_date(self, target_date: str) -> list:
+        """
+        Fetch data for a specific date. Override in subclasses that support
+        date-specific fetching. By default falls back to fetch_data().
+        """
+        return self.fetch_data()
+
     def run(self) -> dict:
         """
         Execute the agent with up to MAX_RETRIES attempts.
+
+        Before fetching today's data, retries any pending (previously failed)
+        dates from the pending_fetches table.
 
         Returns:
             {
@@ -69,6 +82,10 @@ class BaseAgent(ABC):
                 "error": str | None # populated on final failure
             }
         """
+        # --- Phase 1: retry pending fetches ---
+        self._retry_pending_fetches()
+
+        # --- Phase 2: fetch today's data ---
         today = date.today().isoformat()
         start_time = time.monotonic()
         last_error: str | None = None
@@ -91,6 +108,7 @@ class BaseAgent(ABC):
                     "[%s] Success — %d records in %.2fs",
                     self.name, len(data) if data else 0, duration,
                 )
+                resolve_pending_fetch(self.name, today)
                 return {"success": True, "data": data, "error": None}
 
             except Exception as exc:  # noqa: BLE001
@@ -104,7 +122,7 @@ class BaseAgent(ABC):
                     )
                     time.sleep(RETRY_DELAY_SECONDS)
 
-        # All attempts exhausted
+        # All attempts exhausted — mark as pending for future retry
         duration = time.monotonic() - start_time
         log_agent_run(
             agent_name=self.name,
@@ -115,9 +133,58 @@ class BaseAgent(ABC):
             duration_seconds=round(duration, 2),
         )
         self.logger.error("[%s] Failed after %d attempts: %s", self.name, MAX_RETRIES, last_error)
+        add_pending_fetch(self.name, today, last_error)
         self._notify_failure(last_error)
 
         return {"success": False, "data": [], "error": last_error}
+
+    # ------------------------------------------------------------------
+    # Pending fetch retry logic
+    # ------------------------------------------------------------------
+
+    def _retry_pending_fetches(self) -> None:
+        """Retry all unresolved pending fetches for this agent."""
+        pending = get_pending_fetches(self.name)
+        if not pending:
+            return
+
+        self.logger.info("[%s] Found %d pending fetch(es) to retry", self.name, len(pending))
+        for row in pending:
+            pending_date = row["date"]
+            attempts = row["attempts"]
+
+            if attempts >= MAX_RETRIES:
+                # Already exhausted retries — send final alert once (on attempt 3 exactly)
+                continue
+
+            increment_pending_attempt(self.name, pending_date)
+            try:
+                self.logger.info("[%s] Retrying pending date %s (attempt %d)", self.name, pending_date, attempts + 1)
+                data = self.fetch_data_for_date(pending_date)
+                self.save_to_db(data)
+                resolve_pending_fetch(self.name, pending_date)
+                self.logger.info("[%s] Recovered pending date %s", self.name, pending_date)
+                self._notify_recovery(pending_date)
+            except Exception as exc:
+                self.logger.warning("[%s] Retry for %s failed: %s", self.name, pending_date, exc)
+                if attempts + 1 >= MAX_RETRIES:
+                    self._notify_pending_exhausted(pending_date)
+
+    def _notify_recovery(self, pending_date: str) -> None:
+        """Send Telegram alert when a pending fetch is recovered."""
+        try:
+            from notifications.whatsapp import send_alert
+            send_alert(f"\u2705 {self.name}: הושלמו נתונים חסרים ל-{pending_date}")
+        except ImportError:
+            pass
+
+    def _notify_pending_exhausted(self, pending_date: str) -> None:
+        """Send Telegram alert when a pending fetch exhausted all retries."""
+        try:
+            from notifications.whatsapp import send_alert
+            send_alert(f"\u26a0\ufe0f {self.name}: לא הצלחתי לשלוף נתונים ל-{pending_date} ({MAX_RETRIES} ניסיונות)")
+        except ImportError:
+            pass
 
     # ------------------------------------------------------------------
     # Failure notification (WhatsApp in Step 7, plain log for now)

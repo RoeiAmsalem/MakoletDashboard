@@ -70,7 +70,8 @@ def test_database():
     init_db()
 
     expected_tables = ["daily_sales", "expenses", "employees",
-                       "employee_hours", "fixed_expenses", "agent_logs"]
+                       "employee_hours", "fixed_expenses", "agent_logs",
+                       "pending_fetches"]
 
     with get_connection() as conn:
         existing = {r[0] for r in conn.execute(
@@ -575,6 +576,49 @@ def test_data_integrity():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# 10.5 PENDING FETCHES
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_pending_fetches():
+    header("10.5", "PENDING FETCHES")
+    from database.db import get_pending_fetches, get_connection
+
+    ok = True
+
+    # Check table exists
+    with get_connection() as conn:
+        tables = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()}
+        ok &= check("Table 'pending_fetches' exists", "pending_fetches" in tables)
+
+    pending = get_pending_fetches()
+    info("Total unresolved", f"{len(pending)} pending fetch(es)")
+
+    if pending:
+        # Count per agent
+        by_agent = {}
+        for row in pending:
+            agent = row["agent"]
+            by_agent[agent] = by_agent.get(agent, 0) + 1
+        print()
+        for agent, count in sorted(by_agent.items()):
+            info(f"  {agent}", f"{count} pending")
+
+        print()
+        print(f"  {BOLD}Unresolved pending fetches:{RESET}")
+        for row in pending:
+            attempts_str = f"attempts={row['attempts']}"
+            reason_str = f"reason={row['reason']}" if row["reason"] else ""
+            last = f"last_try={row['last_attempt_at']}" if row["last_attempt_at"] else "never tried"
+            print(f"    {row['agent']:<15s}  {row['date']}  {attempts_str}  {last}  {reason_str}")
+    else:
+        info("Status", "all caught up")
+
+    results["Pending Fetches"] = "pass" if ok else "fail"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # 10. SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -621,4 +665,5 @@ if __name__ == "__main__":
     test_scheduler()
     test_flask()
     test_data_integrity()
+    test_pending_fetches()
     print_summary()

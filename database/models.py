@@ -71,6 +71,20 @@ CREATE TABLE IF NOT EXISTS agent_logs (
 );
 """
 
+CREATE_PENDING_FETCHES = """
+CREATE TABLE IF NOT EXISTS pending_fetches (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent           TEXT    NOT NULL,
+    date            TEXT    NOT NULL,           -- YYYY-MM-DD
+    reason          TEXT,
+    attempts        INTEGER DEFAULT 0,
+    created_at      TEXT    DEFAULT (datetime('now')),
+    last_attempt_at TEXT,
+    resolved_at     TEXT,                       -- NULL = still pending
+    UNIQUE(agent, date)
+);
+"""
+
 ALL_TABLES = [
     CREATE_DAILY_SALES,
     CREATE_EXPENSES,
@@ -78,6 +92,7 @@ ALL_TABLES = [
     CREATE_EMPLOYEE_HOURS,
     CREATE_FIXED_EXPENSES,
     CREATE_AGENT_LOGS,
+    CREATE_PENDING_FETCHES,
 ]
 
 

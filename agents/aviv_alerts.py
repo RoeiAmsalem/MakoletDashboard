@@ -28,7 +28,7 @@ import pdfplumber
 from dotenv import load_dotenv
 
 from agents.base_agent import BaseAgent
-from database.db import get_connection, insert_daily_sale
+from database.db import get_connection, insert_daily_sale, add_pending_fetch, resolve_pending_fetch
 
 load_dotenv()
 
@@ -76,6 +76,7 @@ def check_missing_z_reports() -> list[str]:
     Check the past 7 days for missing Z-reports.
     Returns a list of date strings (YYYY-MM-DD) where a report was expected
     but no daily_sales record exists.
+    Also registers missing dates as pending fetches.
     """
     today = date.today()
     missing = []
@@ -90,6 +91,7 @@ def check_missing_z_reports() -> list[str]:
             ).fetchone()[0]
             if count == 0:
                 missing.append(d.isoformat())
+                add_pending_fetch("aviv_alerts", d.isoformat(), "Z report missing")
     return missing
 
 
@@ -205,13 +207,14 @@ class AvivAlertsAgent(BaseAgent):
             mail.logout()
 
     def save_to_db(self, data: list[dict]) -> None:
-        """Insert each record into daily_sales."""
+        """Insert each record into daily_sales and resolve pending fetches."""
         for record in data:
             insert_daily_sale(
                 date=record["date"],
                 total_income=record["total_income"],
                 source=record["source"],
             )
+            resolve_pending_fetch("aviv_alerts", record["date"])
         self.logger.info("[aviv_alerts] Saved %d daily sale record(s) to DB.", len(data))
 
 

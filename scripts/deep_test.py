@@ -213,7 +213,7 @@ def test_aviv():
             if sender:
                 today_str = date.today().strftime("%d-%b-%Y")
                 status, data = mail.search(
-                    None, f'(FROM "{sender}" SINCE "{today_str}" SUBJECT "דוח סוף יום")')
+                    None, f'(FROM "{sender}" SINCE "{today_str}")')
                 z_count = len(data[0].split()) if data and data[0] else 0
                 ok &= check("Today's Z-report emails", True, f"{z_count} found")
             mail.logout()
@@ -410,6 +410,23 @@ def test_scheduler():
     info("Agents", "bilboy + aviv_alerts always; employee_hours days 1-5 only")
     info("Z-report check", "After aviv_alerts, checks past 7 days for missing reports")
     info("Timezone", "Asia/Jerusalem")
+    print()
+
+    # --- Scheduler systemd service check (VPS only) ---
+    is_vps = os.path.isdir("/opt/makolet-dashboard")
+    if is_vps:
+        try:
+            result = subprocess.run(
+                ["systemctl", "is-active", "makolet-scheduler"],
+                capture_output=True, text=True, timeout=5,
+            )
+            active = result.stdout.strip() == "active"
+            ok &= check("makolet-scheduler service active", active,
+                         result.stdout.strip())
+        except Exception as e:
+            ok &= check("makolet-scheduler service active", False, str(e))
+    else:
+        print(f"  {DIM}[SKIP] makolet-scheduler service check (not on VPS){RESET}")
     print()
 
     try:

@@ -124,7 +124,7 @@ class AvivAlertsAgent(BaseAgent):
         search_criteria = (
             f'(FROM "{self._sender_email}" SINCE "{today_str}" SUBJECT "דוח סוף יום")'
         )
-        status, data = mail.search(None, search_criteria)
+        status, data = mail.search("UTF-8", search_criteria.encode("utf-8"))
         if status != "OK" or not data or not data[0]:
             return []
         return data[0].split()

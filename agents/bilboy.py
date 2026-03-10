@@ -146,28 +146,17 @@ class BilBoyAgent(BaseAgent):
 
     def fetch_data(self) -> list[dict]:
         """
-        Run the BilBoy API flow for yesterday (default date range),
-        then backfill any missing days from the last 7 days.
+        Fetch invoices for the last 7 days in a single API call.
+        Duplicate detection in save_to_db() ensures only new invoices are
+        inserted, so late-arriving invoices on days we already have data for
+        are caught automatically.
         """
-        records = self._fetch_invoices()
-
-        # Backfill: check last 7 days for gaps
         today = date.today()
-        with get_connection() as conn:
-            for i in range(2, 8):  # 2..7 days ago (yesterday already covered above)
-                d = today - timedelta(days=i)
-                if d.weekday() == 5:  # Saturday — no deliveries
-                    continue
-                day_str = d.isoformat()
-                count = conn.execute(
-                    "SELECT COUNT(*) FROM expenses WHERE date=? AND source='bilboy'",
-                    (day_str,),
-                ).fetchone()[0]
-                if count == 0:
-                    self.logger.info("[bilboy] Backfilling %s (0 invoices in DB)", day_str)
-                    extra = self._fetch_invoices(from_date=day_str, to_date=day_str)
-                    records.extend(extra)
-
+        from_date = (today - timedelta(days=7)).isoformat()
+        to_date = (today - timedelta(days=1)).isoformat()
+        records = self._fetch_invoices(from_date=from_date, to_date=to_date)
+        self.logger.info("[bilboy] Fetched %d invoices for %s to %s",
+                         len(records), from_date, to_date)
         return records
 
     def fetch_data_for_date(self, target_date: str) -> list[dict]:

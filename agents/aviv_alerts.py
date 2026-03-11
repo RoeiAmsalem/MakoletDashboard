@@ -18,11 +18,13 @@ Credentials from .env:
 import calendar
 import email
 import email.header
+import email.utils
 import imaplib
 import io
 import os
 import re
 from datetime import date, timedelta
+from zoneinfo import ZoneInfo
 
 import pdfplumber
 from dotenv import load_dotenv
@@ -115,33 +117,41 @@ class AvivAlertsAgent(BaseAgent):
         mail.select("inbox")
         return mail
 
-    def _search_today_email(self, mail: imaplib.IMAP4_SSL) -> list[bytes]:
+    def _search_recent_emails(self, mail: imaplib.IMAP4_SSL,
+                              since_days: int = 7) -> list[bytes]:
         """
-        Search for emails sent today from the Aviv sender.
+        Search for emails from the Aviv sender in the last `since_days` days.
         Returns a list of message-id byte strings.
         """
-        today_str = date.today().strftime("%d-%b-%Y")  # e.g. "06-Mar-2026"
-        search_criteria = (
-            f'(FROM "{self._sender_email}" SINCE "{today_str}")'
-        )
-        status, data = mail.search(None, search_criteria)
+        since_str = (date.today() - timedelta(days=since_days)).strftime("%d-%b-%Y")
+        if self._sender_email:
+            criteria = f'(FROM "{self._sender_email}" SINCE "{since_str}")'
+        else:
+            criteria = f'(SINCE "{since_str}")'
+        status, data = mail.search(None, criteria)
         if status != "OK" or not data or not data[0]:
             return []
         return data[0].split()
 
-    def _fetch_pdf_attachment(self, mail: imaplib.IMAP4_SSL, msg_id: bytes) -> bytes | None:
+    @staticmethod
+    def _parse_email_date(msg: email.message.Message) -> date | None:
+        """Extract the business date from the email's Date header (Israel time)."""
+        date_str = msg.get("Date")
+        if not date_str:
+            return None
+        try:
+            dt = email.utils.parsedate_to_datetime(date_str)
+            return dt.astimezone(ZoneInfo("Asia/Jerusalem")).date()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _extract_z_pdf(msg: email.message.Message) -> bytes | None:
         """
-        Fetch the first PDF attachment whose filename starts with 'z_'.
+        Extract the first PDF attachment whose filename starts with 'z_'.
         Handles both application/pdf and application/octet-stream content types.
         Returns raw PDF bytes or None if not found.
         """
-        status, msg_data = mail.fetch(msg_id, "(RFC822)")
-        if status != "OK":
-            return None
-
-        raw_email = msg_data[0][1]
-        msg = email.message_from_bytes(raw_email)
-
         for part in msg.walk():
             ct = part.get_content_type()
             if ct not in ("application/pdf", "application/octet-stream"):
@@ -150,7 +160,6 @@ class AvivAlertsAgent(BaseAgent):
             filename = _decode_filename(raw_fn)
             if filename.lower().startswith("z_") and filename.lower().endswith(".pdf"):
                 return part.get_payload(decode=True)
-
         return None
 
     def _extract_total_from_pdf(self, pdf_bytes: bytes) -> float | None:
@@ -177,32 +186,94 @@ class AvivAlertsAgent(BaseAgent):
 
     def fetch_data(self) -> list[dict]:
         """
-        Connect to Gmail, find today's Z-report, parse the total.
+        Connect to Gmail, find Z-report emails from the last 7 days,
+        and parse any that are missing from daily_sales.
 
-        Returns:
-            [{"date": "YYYY-MM-DD", "total_income": float, "source": "aviv"}]
-            or [] if no email found today.
+        Returns a list of {"date", "total_income", "source"} dicts.
         """
         mail = self._connect()
         try:
-            msg_ids = self._search_today_email(mail)
+            msg_ids = self._search_recent_emails(mail)
             if not msg_ids:
-                self.logger.info("[aviv_alerts] No Z-report email found for today.")
+                self.logger.info("[aviv_alerts] No Z-report email found in last 7 days.")
                 return []
 
-            # Use the latest matching email (last in list)
-            msg_id = msg_ids[-1]
-            pdf_bytes = self._fetch_pdf_attachment(mail, msg_id)
-            if pdf_bytes is None:
-                raise ValueError("Email found but no z_*.pdf attachment detected.")
+            self.logger.info("[aviv_alerts] Found %d emails in last 7 days", len(msg_ids))
 
-            total = self._extract_total_from_pdf(pdf_bytes)
-            if total is None:
-                raise ValueError("PDF attachment found but could not parse סה\"כ total.")
+            # Dates we already have in DB
+            cutoff = (date.today() - timedelta(days=7)).isoformat()
+            with get_connection() as conn:
+                existing = set(
+                    r[0] for r in conn.execute(
+                        "SELECT date FROM daily_sales WHERE date >= ?", (cutoff,)
+                    ).fetchall()
+                )
 
-            today = date.today().isoformat()
-            self.logger.info("[aviv_alerts] Parsed total_income=%.2f for %s", total, today)
-            return [{"date": today, "total_income": total, "source": "aviv"}]
+            records = []
+            for msg_id in msg_ids:
+                status, msg_data = mail.fetch(msg_id, "(RFC822)")
+                if status != "OK":
+                    continue
+
+                msg = email.message_from_bytes(msg_data[0][1])
+                email_date = self._parse_email_date(msg)
+                if email_date is None:
+                    continue
+
+                date_str = email_date.isoformat()
+                if date_str in existing:
+                    self.logger.debug("[aviv_alerts] Skipping %s — already in DB", date_str)
+                    continue
+
+                pdf_bytes = self._extract_z_pdf(msg)
+                if pdf_bytes is None:
+                    continue
+
+                total = self._extract_total_from_pdf(pdf_bytes)
+                if total is None:
+                    self.logger.warning("[aviv_alerts] Could not parse total from PDF for %s", date_str)
+                    continue
+
+                self.logger.info("[aviv_alerts] Parsed total_income=%.2f for %s", total, date_str)
+                records.append({"date": date_str, "total_income": total, "source": "aviv"})
+                existing.add(date_str)  # prevent duplicates within same run
+
+            return records
+        finally:
+            mail.logout()
+
+    def fetch_data_for_date(self, target_date: str) -> list[dict]:
+        """Search for a Z-report for a specific date."""
+        target = date.fromisoformat(target_date)
+        mail = self._connect()
+        try:
+            # Search from the day before (email might arrive late)
+            since_str = (target - timedelta(days=1)).strftime("%d-%b-%Y")
+            if self._sender_email:
+                criteria = f'(FROM "{self._sender_email}" SINCE "{since_str}")'
+            else:
+                criteria = f'(SINCE "{since_str}")'
+            status, data = mail.search(None, criteria)
+            if status != "OK" or not data or not data[0]:
+                return []
+
+            for msg_id in data[0].split():
+                status, msg_data = mail.fetch(msg_id, "(RFC822)")
+                if status != "OK":
+                    continue
+                msg = email.message_from_bytes(msg_data[0][1])
+                email_date = self._parse_email_date(msg)
+                if email_date != target:
+                    continue
+                pdf_bytes = self._extract_z_pdf(msg)
+                if pdf_bytes is None:
+                    continue
+                total = self._extract_total_from_pdf(pdf_bytes)
+                if total is None:
+                    continue
+                self.logger.info("[aviv_alerts] Parsed total_income=%.2f for %s", total, target_date)
+                return [{"date": target_date, "total_income": total, "source": "aviv"}]
+            return []
         finally:
             mail.logout()
 

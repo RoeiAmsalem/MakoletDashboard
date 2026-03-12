@@ -543,6 +543,7 @@ body {
 .mobile-nav {
     display: none;
 }
+/* On mobile, animation is handled via max-height (see @media below) */
 
 /* --- Month switcher (mobile row) ----------------------------- */
 .month-switcher-mobile {
@@ -576,14 +577,19 @@ body {
         display: none !important;
     }
 
-    /* Mobile nav links panel */
-    .mobile-nav {
-        display: none;
+    /* Mobile nav links panel — slide-down animation */
+    #mobile-nav {
+        display: flex;
         flex-direction: column;
         width: 100%;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.35s ease, opacity 0.35s ease;
+        opacity: 0;
     }
-    .mobile-nav.open {
-        display: flex;
+    #mobile-nav.open {
+        max-height: 400px;
+        opacity: 1;
     }
     .mobile-nav a {
         color: var(--text-secondary);

@@ -126,9 +126,8 @@
             line-height: 1;
         }
         .btn-close-modal:hover { color: var(--text-primary); }
-        .pdf-modal iframe {
+        .pdf-modal #pdf-canvas-container {
             flex: 1;
-            background: #fff;
         }
     </style>
 </head>
@@ -211,12 +210,9 @@
                 <button class="btn-close-modal" id="pdf-close">&times;</button>
             </div>
         </div>
-        <iframe
-          id="pdf-embed"
-          src=""
-          style="width:100%; height:75vh; border:none; background:#fff;"
-          allowfullscreen
-        ></iframe>
+        <div id="pdf-canvas-container" style="width:100%; height:75vh; overflow-y:auto; background:#525659; border-radius:4px;">
+            <canvas id="pdf-canvas" style="display:block; margin:0 auto;"></canvas>
+        </div>
     </div>
 </div>
 
@@ -241,38 +237,66 @@ function fmtDate(dateStr) {
 }
 
 // ── PDF modal ────────────────────────────────────────────────
-const overlay  = document.getElementById('pdf-overlay');
-const pdfEmbed = document.getElementById('pdf-embed');
-const dlLink   = document.getElementById('pdf-download-link');
-const title    = document.getElementById('pdf-modal-title');
-let currentBlobUrl = null;
+const overlay   = document.getElementById('pdf-overlay');
+const dlLink    = document.getElementById('pdf-download-link');
+const modalTitle = document.getElementById('pdf-modal-title');
 
 async function openPdf(dateStr) {
-    // Show modal with loading state
-    title.textContent = `דוח Z — ${fmtDate(dateStr)}`;
+    modalTitle.textContent = `דוח Z — ${fmtDate(dateStr)}`;
     dlLink.href = `/api/sales/pdf/${dateStr}`;
-    pdfEmbed.src = '';
-    pdfEmbed.style.display = 'none';
     overlay.classList.add('active');
 
-    // Fetch PDF as blob to bypass Chrome iframe PDF blocking on HTTP
+    // Clear previous extra canvases
+    const container = document.getElementById('pdf-canvas-container');
+    container.querySelectorAll('canvas:not(#pdf-canvas)').forEach(c => c.remove());
+
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
     try {
         const response = await fetch(`/api/sales/pdf/${dateStr}`);
-        const blob = await response.blob();
-        if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
-        currentBlobUrl = URL.createObjectURL(blob);
-        pdfEmbed.src = currentBlobUrl;
-        pdfEmbed.style.display = 'block';
+        const arrayBuffer = await response.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        const containerWidth = container.clientWidth - 32;
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 1 });
+            const scale = containerWidth / viewport.width;
+            const scaledViewport = page.getViewport({ scale });
+
+            let c = (i === 1) ? canvas : document.createElement('canvas');
+            c.width = scaledViewport.width;
+            c.height = scaledViewport.height;
+            c.style.display = 'block';
+            c.style.margin = '4px auto';
+            if (i > 1) container.appendChild(c);
+
+            await page.render({ canvasContext: c.getContext('2d'), viewport: scaledViewport }).promise;
+        }
     } catch (e) {
-        pdfEmbed.style.display = 'block';
-        console.error('PDF load error:', e);
+        canvas.width = 500;
+        canvas.height = 80;
+        const c2 = canvas.getContext('2d');
+        c2.fillStyle = 'white';
+        c2.font = '14px Arial';
+        c2.fillText('שגיאה: ' + e.message, 10, 40);
+        console.error('PDF.js error:', e);
     }
 }
 
 function closePdf() {
     overlay.classList.remove('active');
-    pdfEmbed.src = '';
-    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
+    const container = document.getElementById('pdf-canvas-container');
+    container.querySelectorAll('canvas:not(#pdf-canvas)').forEach(c => c.remove());
+    const canvas = document.getElementById('pdf-canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 }
 
 document.getElementById('pdf-close').addEventListener('click', closePdf);
@@ -370,5 +394,6 @@ async function loadSales() {
 
 loadSales();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </body>
 </html>

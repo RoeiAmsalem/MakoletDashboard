@@ -37,6 +37,9 @@ load_dotenv()
 IMAP_HOST = "imap.gmail.com"
 IMAP_PORT = 993
 
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+Z_PDFS_DIR = os.path.join(_PROJECT_ROOT, "data", "z_pdfs")
+
 # RTL PDF text renders as: "20295.85 ₪ :כ"הס"
 # This regex matches the main total line (with colon before כ"הס)
 TOTAL_PATTERN_RTL = re.compile(r'([\d,]+\.?\d*)\s*₪\s*:כ"הס')
@@ -191,6 +194,7 @@ class AvivAlertsAgent(BaseAgent):
 
         Returns a list of {"date", "total_income", "source"} dicts.
         """
+        os.makedirs(Z_PDFS_DIR, exist_ok=True)
         mail = self._connect()
         try:
             msg_ids = self._search_recent_emails(mail)
@@ -234,8 +238,14 @@ class AvivAlertsAgent(BaseAgent):
                     self.logger.warning("[aviv_alerts] Could not parse total from PDF for %s", date_str)
                     continue
 
+                # Save PDF to disk
+                pdf_filename = f"z_{date_str}.pdf"
+                pdf_path = os.path.join(Z_PDFS_DIR, pdf_filename)
+                with open(pdf_path, "wb") as f:
+                    f.write(pdf_bytes)
+
                 self.logger.info("[aviv_alerts] Parsed total_income=%.2f for %s", total, date_str)
-                records.append({"date": date_str, "total_income": total, "source": "aviv"})
+                records.append({"date": date_str, "total_income": total, "source": "aviv", "pdf_path": pdf_filename})
                 existing.add(date_str)  # prevent duplicates within same run
 
             return records
@@ -244,6 +254,7 @@ class AvivAlertsAgent(BaseAgent):
 
     def fetch_data_for_date(self, target_date: str) -> list[dict]:
         """Search for a Z-report for a specific date."""
+        os.makedirs(Z_PDFS_DIR, exist_ok=True)
         target = date.fromisoformat(target_date)
         mail = self._connect()
         try:
@@ -271,8 +282,15 @@ class AvivAlertsAgent(BaseAgent):
                 total = self._extract_total_from_pdf(pdf_bytes)
                 if total is None:
                     continue
+
+                # Save PDF to disk
+                pdf_filename = f"z_{target_date}.pdf"
+                pdf_path = os.path.join(Z_PDFS_DIR, pdf_filename)
+                with open(pdf_path, "wb") as f:
+                    f.write(pdf_bytes)
+
                 self.logger.info("[aviv_alerts] Parsed total_income=%.2f for %s", total, target_date)
-                return [{"date": target_date, "total_income": total, "source": "aviv"}]
+                return [{"date": target_date, "total_income": total, "source": "aviv", "pdf_path": pdf_filename}]
             return []
         finally:
             mail.logout()
@@ -284,6 +302,7 @@ class AvivAlertsAgent(BaseAgent):
                 date=record["date"],
                 total_income=record["total_income"],
                 source=record["source"],
+                pdf_path=record.get("pdf_path"),
             )
             resolve_pending_fetch("aviv_alerts", record["date"])
         self.logger.info("[aviv_alerts] Saved %d daily sale record(s) to DB.", len(data))

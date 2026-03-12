@@ -49,6 +49,7 @@ from database.db import (
     calculate_estimated_profit,
     delete_employee,
     delete_fixed_expense,
+    get_all_daily_sales,
     get_all_employees,
     get_all_fixed_expenses,
     get_electricity_bills,
@@ -64,6 +65,7 @@ from database.db import (
 )
 
 _ELEC_BILLS_DIR = os.path.join(_PROJECT_ROOT, "data", "electricity_bills")
+_Z_PDFS_DIR = os.path.join(_PROJECT_ROOT, "data", "z_pdfs")
 
 load_dotenv()
 
@@ -336,6 +338,29 @@ def api_electricity_pdf(filename):
     if not os.path.isdir(_ELEC_BILLS_DIR):
         abort(404)
     return send_from_directory(_ELEC_BILLS_DIR, filename)
+
+
+@app.route("/api/sales")
+@login_required
+def api_sales_list():
+    """Return all daily_sales records (newest first)."""
+    rows = get_all_daily_sales()
+    return jsonify([dict(r) for r in rows])
+
+
+@app.route("/api/sales/pdf/<date_str>")
+@login_required
+def api_sales_pdf(date_str):
+    """Serve a Z-report PDF for the given date. Validates date format."""
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        abort(400)
+    filename = f"z_{date_str}.pdf"
+    if not os.path.isdir(_Z_PDFS_DIR):
+        abort(404)
+    pdf_path = os.path.join(_Z_PDFS_DIR, filename)
+    if not os.path.isfile(pdf_path):
+        abort(404)
+    return send_from_directory(_Z_PDFS_DIR, filename)
 
 
 @app.route("/api/history")

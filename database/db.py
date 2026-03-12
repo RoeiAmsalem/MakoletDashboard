@@ -119,12 +119,13 @@ def _seed_sample_data(conn: sqlite3.Connection):
 # daily_sales
 # ---------------------------------------------------------------------------
 
-def insert_daily_sale(date: str, total_income: float, source: str) -> int:
+def insert_daily_sale(date: str, total_income: float, source: str,
+                      pdf_path: str = None) -> int:
     """Insert a daily sales record. Returns the new row id."""
     with get_connection() as conn:
         cur = conn.execute(
-            "INSERT INTO daily_sales (date, total_income, source) VALUES (?, ?, ?)",
-            (date, total_income, source),
+            "INSERT INTO daily_sales (date, total_income, source, pdf_path) VALUES (?, ?, ?, ?)",
+            (date, total_income, source, pdf_path),
         )
         return cur.lastrowid
 
@@ -134,6 +135,14 @@ def get_sales_by_month(month: int, year: int) -> list[sqlite3.Row]:
         return conn.execute(
             "SELECT * FROM daily_sales WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ? ORDER BY date",
             (f"{month:02d}", str(year)),
+        ).fetchall()
+
+
+def get_all_daily_sales() -> list[sqlite3.Row]:
+    """Return all daily_sales records ordered by date descending."""
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM daily_sales ORDER BY date DESC"
         ).fetchall()
 
 

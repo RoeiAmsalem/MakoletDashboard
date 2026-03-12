@@ -5,13 +5,140 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>הכנסות - מכולת דשבורד</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* ── Green accent overrides ── */
+        .page-accent        { color: #34d399; }
+        .kpi-card--sales {
+            background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
+            border-color: rgba(52,211,153,0.25);
+        }
+        .kpi-value.sales    { color: #6ee7b7; }
+
+        /* ── Table card ── */
+        .table-card {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+        .table-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .table-header h2 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .data-table thead th { background: #162032; }
+        .data-table td.sales-amount { color: #6ee7b7; font-weight: 600; }
+
+        /* ── PDF button ── */
+        .btn-pdf {
+            font-size: 0.82rem;
+            padding: 0.28rem 0.6rem;
+            background: rgba(52,211,153,0.1);
+            border: 1px solid rgba(52,211,153,0.3);
+            border-radius: 6px;
+            color: #34d399;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s;
+            text-decoration: none;
+        }
+        .btn-pdf:hover { background: rgba(52,211,153,0.22); }
+
+        /* ── tfoot ── */
+        tfoot td {
+            font-weight: 700;
+            color: #6ee7b7;
+            background: #1a1d35 !important;
+            border-top: 2px solid rgba(52,211,153,0.25) !important;
+            padding: 0.8rem 0.75rem;
+        }
+
+        /* ── PDF Modal ── */
+        .pdf-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(4px);
+            align-items: center;
+            justify-content: center;
+        }
+        .pdf-overlay.active { display: flex; }
+        .pdf-modal {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            width: min(90vw, 800px);
+            height: 85vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .pdf-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1.25rem;
+            border-bottom: 1px solid var(--card-border);
+        }
+        .pdf-modal-header h3 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+        .pdf-modal-actions {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        .btn-download {
+            font-size: 0.82rem;
+            padding: 0.28rem 0.75rem;
+            background: rgba(52,211,153,0.12);
+            border: 1px solid rgba(52,211,153,0.3);
+            border-radius: 6px;
+            color: #34d399;
+            cursor: pointer;
+            font-family: inherit;
+            text-decoration: none;
+            transition: background 0.15s;
+        }
+        .btn-download:hover { background: rgba(52,211,153,0.25); }
+        .btn-close-modal {
+            font-size: 1.2rem;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            line-height: 1;
+        }
+        .btn-close-modal:hover { color: var(--text-primary); }
+        .pdf-modal iframe {
+            flex: 1;
+            border: none;
+            background: #fff;
+        }
+    </style>
 </head>
 <body>
 
 <nav class="navbar">
     <div class="navbar-brand">
         <span class="store-name">🏪 מכולת</span>
-        <span class="page-title">הכנסות</span>
+        <span class="page-title">📈 הכנסות</span>
     </div>
     <nav>
         <ul class="navbar-nav">
@@ -27,6 +154,7 @@
         </ul>
     </nav>
     <div class="navbar-end">
+        <span id="current-month" class="navbar-meta"></span>
         <span class="navbar-user">
             {{ current_user.username }}
             {% if current_user.is_admin %}
@@ -39,9 +167,188 @@
     </div>
 </nav>
 
-<main class="main-content" style="display:flex;align-items:center;justify-content:center;min-height:60vh">
-    <h1 style="color:var(--text-muted);font-size:2rem">הכנסות — בקרוב</h1>
+<main class="main-content">
+
+    <!-- KPI cards -->
+    <section class="cards-grid" id="kpi-section">
+        <div class="loading"><div class="spinner"></div><span>טוען...</span></div>
+    </section>
+
+    <!-- Sales table -->
+    <div class="table-card">
+        <div class="table-header">
+            <h2><span class="page-accent">📈</span> דוחות Z יומיים</h2>
+            <span id="sales-count" style="font-size:0.85rem;color:var(--text-secondary)"></span>
+        </div>
+        <div style="overflow-x:auto">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>תאריך</th>
+                        <th>יום</th>
+                        <th>סכום</th>
+                        <th>PDF</th>
+                    </tr>
+                </thead>
+                <tbody id="sales-tbody">
+                    <tr><td colspan="4">
+                        <div class="loading"><div class="spinner"></div><span>טוען...</span></div>
+                    </td></tr>
+                </tbody>
+                <tfoot id="sales-tfoot"></tfoot>
+            </table>
+        </div>
+    </div>
+
 </main>
 
+<!-- PDF Preview Modal -->
+<div class="pdf-overlay" id="pdf-overlay">
+    <div class="pdf-modal">
+        <div class="pdf-modal-header">
+            <h3 id="pdf-modal-title">דוח Z</h3>
+            <div class="pdf-modal-actions">
+                <a id="pdf-download-link" class="btn-download" download>הורדה</a>
+                <button class="btn-close-modal" id="pdf-close">&times;</button>
+            </div>
+        </div>
+        <iframe id="pdf-iframe"></iframe>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/charts.js') }}"></script>
+<script>
+'use strict';
+
+document.getElementById('current-month').textContent =
+    new Date().toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+
+// ── Day names ────────────────────────────────────────────────
+const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
+function dayName(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    return DAY_NAMES[d.getDay()];
+}
+
+function fmtDate(dateStr) {
+    const [y, m, d] = dateStr.split('-');
+    return `${d}/${m}/${y}`;
+}
+
+// ── PDF modal ────────────────────────────────────────────────
+const overlay  = document.getElementById('pdf-overlay');
+const iframe   = document.getElementById('pdf-iframe');
+const dlLink   = document.getElementById('pdf-download-link');
+const title    = document.getElementById('pdf-modal-title');
+
+function openPdf(dateStr) {
+    const url = `/api/sales/pdf/${dateStr}`;
+    iframe.src = url;
+    dlLink.href = url;
+    title.textContent = `דוח Z — ${fmtDate(dateStr)}`;
+    overlay.classList.add('active');
+}
+
+function closePdf() {
+    overlay.classList.remove('active');
+    iframe.src = '';
+}
+
+document.getElementById('pdf-close').addEventListener('click', closePdf);
+overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closePdf();
+});
+
+// ── Render ───────────────────────────────────────────────────
+function salesRow(s) {
+    const pdfBtn = s.pdf_path
+        ? `<button class="btn-pdf" onclick="openPdf('${s.date}')">PDF 📄</button>`
+        : '<span style="color:var(--text-muted)">—</span>';
+    return `<tr>
+        <td>${fmtDate(s.date)}</td>
+        <td style="color:var(--text-secondary)">${dayName(s.date)}</td>
+        <td class="money sales-amount">${formatMoney(s.total_income)}</td>
+        <td>${pdfBtn}</td>
+    </tr>`;
+}
+
+function renderKpi(sales) {
+    const kpi = document.getElementById('kpi-section');
+    if (!sales.length) {
+        kpi.innerHTML = '<p style="color:var(--text-muted);padding:1.5rem">אין נתוני הכנסות עדיין.</p>';
+        return;
+    }
+
+    const total = sales.reduce((s, r) => s + r.total_income, 0);
+    const avg   = total / sales.length;
+    const max   = Math.max(...sales.map(r => r.total_income));
+    const min   = Math.min(...sales.map(r => r.total_income));
+
+    kpi.innerHTML = `
+        <div class="kpi-card kpi-card--sales">
+            <div class="kpi-header">
+                <span class="kpi-icon">📊</span>
+                <span class="kpi-label">סה"כ הכנסות</span>
+            </div>
+            <span class="kpi-value sales">${formatMoney(total)}</span>
+            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">${sales.length} דוחות</span>
+        </div>
+        <div class="kpi-card kpi-card--sales">
+            <div class="kpi-header">
+                <span class="kpi-icon">📈</span>
+                <span class="kpi-label">ממוצע ליום</span>
+            </div>
+            <span class="kpi-value sales">${formatMoney(avg)}</span>
+        </div>
+        <div class="kpi-card kpi-card--sales">
+            <div class="kpi-header">
+                <span class="kpi-icon">⬆️</span>
+                <span class="kpi-label">היום הגבוה</span>
+            </div>
+            <span class="kpi-value sales">${formatMoney(max)}</span>
+        </div>
+        <div class="kpi-card kpi-card--sales">
+            <div class="kpi-header">
+                <span class="kpi-icon">⬇️</span>
+                <span class="kpi-label">היום הנמוך</span>
+            </div>
+            <span class="kpi-value sales">${formatMoney(min)}</span>
+        </div>`;
+}
+
+// ── Load data ────────────────────────────────────────────────
+async function loadSales() {
+    try {
+        const res = await fetch('/api/sales');
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const sales = await res.json();
+
+        renderKpi(sales);
+
+        const tbody = document.getElementById('sales-tbody');
+        document.getElementById('sales-count').textContent = `${sales.length} דוחות`;
+
+        if (sales.length) {
+            tbody.innerHTML = sales.map(salesRow).join('');
+            const grandTotal = sales.reduce((s, r) => s + r.total_income, 0);
+            document.getElementById('sales-tfoot').innerHTML = `
+                <tr>
+                    <td>סה"כ</td><td></td>
+                    <td class="money">${formatMoney(grandTotal)}</td>
+                    <td></td>
+                </tr>`;
+        } else {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:2rem;color:var(--text-muted)">אין נתוני הכנסות עדיין.</td></tr>';
+        }
+    } catch (err) {
+        console.error(err);
+        document.getElementById('kpi-section').innerHTML = '<p class="error-msg">שגיאה בטעינת נתונים.</p>';
+        document.getElementById('sales-tbody').innerHTML = '<tr><td colspan="4"><p class="error-msg">שגיאה.</p></td></tr>';
+    }
+}
+
+loadSales();
+</script>
 </body>
 </html>

@@ -121,6 +121,16 @@ def _migrate_expenses_columns(conn):
         except Exception:
             pass  # Column already exists
     _cleanup_duplicate_electricity(conn)
+    _migrate_daily_sales_columns(conn)
+
+
+def _migrate_daily_sales_columns(conn):
+    """Add pdf_path column to daily_sales if it doesn't exist yet."""
+    try:
+        conn.execute("ALTER TABLE daily_sales ADD COLUMN pdf_path TEXT")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
 
 
 def _cleanup_duplicate_electricity(conn):

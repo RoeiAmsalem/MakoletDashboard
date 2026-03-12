@@ -154,10 +154,47 @@ def logout():
 # Page routes
 # ---------------------------------------------------------------------------
 
+HEBREW_MONTHS = {
+    1: 'ינואר', 2: 'פברואר', 3: 'מרץ', 4: 'אפריל', 5: 'מאי', 6: 'יוני',
+    7: 'יולי', 8: 'אוגוסט', 9: 'ספטמבר', 10: 'אוקטובר', 11: 'נובמבר', 12: 'דצמבר',
+}
+
+
+def _parse_month_param() -> date:
+    """Parse ?month=YYYY-MM query param, return first day of that month (or today's month)."""
+    raw = request.args.get("month", "")
+    if raw and re.match(r'^\d{4}-\d{2}$', raw):
+        try:
+            y, m = int(raw[:4]), int(raw[5:7])
+            if 1 <= m <= 12:
+                return date(y, m, 1)
+        except ValueError:
+            pass
+    today = date.today()
+    return date(today.year, today.month, 1)
+
+
 @app.route("/")
 @login_required
 def index():
-    return render_template("index.html")
+    selected = _parse_month_param()
+    today_first = date(date.today().year, date.today().month, 1)
+
+    selected_month = selected.strftime("%Y-%m")
+    prev_month = (selected - relativedelta(months=1)).strftime("%Y-%m")
+    # next_month only if it wouldn't go into the future
+    next_first = selected + relativedelta(months=1)
+    next_month = next_first.strftime("%Y-%m") if next_first <= today_first else None
+
+    month_display = f"{HEBREW_MONTHS[selected.month]} {selected.year}"
+
+    return render_template(
+        "index.html",
+        selected_month=selected_month,
+        prev_month=prev_month,
+        next_month=next_month,
+        month_display=month_display,
+    )
 
 
 @app.route("/fixed-expenses")
@@ -197,9 +234,9 @@ def electricity_history():
 @app.route("/api/summary")
 @login_required
 def api_summary():
-    """Return current month KPIs and estimated profit."""
-    today = date.today()
-    data = calculate_estimated_profit(today.month, today.year)
+    """Return KPIs and estimated profit for ?month=YYYY-MM (default: current)."""
+    selected = _parse_month_param()
+    data = calculate_estimated_profit(selected.month, selected.year)
     return jsonify(data)
 
 
@@ -398,11 +435,11 @@ def api_sales_pdf_image(date_str, page):
 @app.route("/api/history")
 @login_required
 def api_history():
-    """Return profit breakdown for the last 6 months (oldest → newest)."""
-    today = date.today()
+    """Return profit breakdown for the last 6 months relative to ?month= (oldest → newest)."""
+    selected = _parse_month_param()
     months = []
     for i in range(5, -1, -1):
-        target = today - relativedelta(months=i)
+        target = selected - relativedelta(months=i)
         row = calculate_estimated_profit(target.month, target.year)
         label = date(target.year, target.month, 1).strftime("%-m/%Y")
         row["label"] = label

@@ -28,7 +28,15 @@
         </ul>
     </nav>
     <div class="navbar-end">
-        <span id="current-month" class="navbar-meta"></span>
+        <div style="display:flex; align-items:center; gap:6px; font-size:0.9rem;">
+            <a href="/?month={{ prev_month }}" style="color:#aaa; text-decoration:none; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.08);">‹</a>
+            <span style="color:white; font-weight:600; min-width:80px; text-align:center;">{{ month_display }}</span>
+            {% if next_month %}
+            <a href="/?month={{ next_month }}" style="color:#aaa; text-decoration:none; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.08);">›</a>
+            {% else %}
+            <span style="color:#444; padding:2px 6px;">›</span>
+            {% endif %}
+        </div>
         <span class="navbar-user">
             {{ current_user.username }}
             {% if current_user.is_admin %}
@@ -104,10 +112,7 @@
 // Injected by Flask-Login — used to show/hide admin-only UI
 const USER_ROLE = {{ current_user.role | tojson }};
 const IS_ADMIN  = USER_ROLE === 'admin';
-
-// ── Navbar: current month ──────────────────────────────────────
-document.getElementById('current-month').textContent =
-    new Date().toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+const SELECTED_MONTH = {{ selected_month | tojson }};
 
 // ── Helpers ────────────────────────────────────────────────────
 function show(el) { el.style.display = ''; }
@@ -118,7 +123,7 @@ function hide(el) { el.style.display = 'none'; }
 async function loadSummary() {
     const section = document.getElementById('kpi-section');
     try {
-        const res = await fetch('/api/summary');
+        const res = await fetch(`/api/summary?month=${SELECTED_MONTH}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const d = await res.json();
         renderKpis(section, d);
@@ -139,18 +144,24 @@ function renderKpis(section, d) {
                           : 'משוער';
     const pct             = Math.min(100, Math.round(d.ratio * 100));
 
+    // Show ratio bar only for current month
+    const now = new Date();
+    const isCurrentMonth = SELECTED_MONTH === `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const ratioHtml = isCurrentMonth ? `
+            <div class="ratio-bar">
+                <div class="ratio-bar-fill" style="width:${pct}%"></div>
+            </div>
+            <span class="ratio-label">יום ${d.days_passed} מתוך ${d.days_in_month} · ${pct}% מהחודש</span>` : '';
+
     section.innerHTML = `
         <div class="kpi-card ${profitCardClass}">
             <div class="kpi-header">
                 <span class="kpi-icon">💰</span>
-                <span class="kpi-label">רווח חודש שוטף</span>
+                <span class="kpi-label">${isCurrentMonth ? 'רווח חודש שוטף' : 'רווח חודשי'}</span>
             </div>
             <span class="kpi-value ${profitValClass}">${formatMoney(d.profit)}</span>
             <span class="kpi-badge ${badgeClass}">${badgeText}</span>
-            <div class="ratio-bar">
-                <div class="ratio-bar-fill" style="width:${pct}%"></div>
-            </div>
-            <span class="ratio-label">יום ${d.days_passed} מתוך ${d.days_in_month} · ${pct}% מהחודש</span>
+            ${ratioHtml}
         </div>
 
         <div class="kpi-card kpi-card--income" style="cursor:pointer" onclick="location.href='/sales'">
@@ -194,7 +205,7 @@ async function loadHistory() {
     const chartWrapper = document.getElementById('chart-wrapper');
     const tbody        = document.getElementById('history-tbody');
     try {
-        const res = await fetch('/api/history');
+        const res = await fetch(`/api/history?month=${SELECTED_MONTH}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const months = await res.json();
         renderChart(months, chartLoading, chartWrapper);

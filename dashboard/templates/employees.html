@@ -261,10 +261,11 @@
 <body>
 
 <nav class="navbar">
-    <div class="navbar-brand">
-        <span class="store-name">🏪 מכולת</span>
-        <span class="page-title">עובדים</span>
-    </div>
+    <a href="/" class="navbar-brand" style="text-decoration:none; display:flex; align-items:center;">
+        <img src="{{ url_for('static', filename='makolet_logo.jpg') }}"
+             alt="מכולת"
+             style="height:36px; width:auto; object-fit:contain;">
+    </a>
     <nav>
         <ul class="navbar-nav">
             <li><a href="/">בית</a></li>

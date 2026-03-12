@@ -34,7 +34,7 @@ from dateutil.relativedelta import relativedelta
 
 import re
 
-from flask import Flask, abort, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Flask, abort, jsonify, make_response, redirect, render_template, request, send_file, send_from_directory, url_for
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -355,12 +355,18 @@ def api_sales_pdf(date_str):
     if not re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
         abort(400)
     filename = f"z_{date_str}.pdf"
-    if not os.path.isdir(_Z_PDFS_DIR):
-        abort(404)
     pdf_path = os.path.join(_Z_PDFS_DIR, filename)
     if not os.path.isfile(pdf_path):
         abort(404)
-    return send_from_directory(_Z_PDFS_DIR, filename)
+    response = make_response(send_file(
+        pdf_path,
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=filename,
+    ))
+    response.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    return response
 
 
 @app.route("/api/history")

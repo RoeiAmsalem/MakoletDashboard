@@ -245,18 +245,34 @@ const overlay  = document.getElementById('pdf-overlay');
 const pdfEmbed = document.getElementById('pdf-embed');
 const dlLink   = document.getElementById('pdf-download-link');
 const title    = document.getElementById('pdf-modal-title');
+let currentBlobUrl = null;
 
-function openPdf(dateStr) {
-    const url = `/api/sales/pdf/${dateStr}`;
-    pdfEmbed.src = url;
-    dlLink.href = url;
+async function openPdf(dateStr) {
+    // Show modal with loading state
     title.textContent = `דוח Z — ${fmtDate(dateStr)}`;
+    dlLink.href = `/api/sales/pdf/${dateStr}`;
+    pdfEmbed.src = '';
+    pdfEmbed.style.display = 'none';
     overlay.classList.add('active');
+
+    // Fetch PDF as blob to bypass Chrome iframe PDF blocking on HTTP
+    try {
+        const response = await fetch(`/api/sales/pdf/${dateStr}`);
+        const blob = await response.blob();
+        if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+        currentBlobUrl = URL.createObjectURL(blob);
+        pdfEmbed.src = currentBlobUrl;
+        pdfEmbed.style.display = 'block';
+    } catch (e) {
+        pdfEmbed.style.display = 'block';
+        console.error('PDF load error:', e);
+    }
 }
 
 function closePdf() {
     overlay.classList.remove('active');
     pdfEmbed.src = '';
+    if (currentBlobUrl) { URL.revokeObjectURL(currentBlobUrl); currentBlobUrl = null; }
 }
 
 document.getElementById('pdf-close').addEventListener('click', closePdf);

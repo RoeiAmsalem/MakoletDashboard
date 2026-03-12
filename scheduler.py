@@ -5,6 +5,7 @@ Schedule (Asia/Jerusalem timezone):
     02:00 every night — run bilboy + aviv_alerts always,
                         run employee_hours only on days 1-5 of the month
                         AND only if not already finalized for this month.
+    Saturday 02:00    — full-month BilBoy reconciliation (separate job).
 
 On startup: all applicable agents run once immediately for testing.
 """
@@ -18,7 +19,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from agents.bilboy import BilBoyAgent
 from agents.aviv_alerts import AvivAlertsAgent, check_missing_z_reports
 from agents.employee_hours import EmployeeHoursAgent
-from database.db import init_db, get_connection, get_total_income, get_total_expenses_by_category
+from database.db import init_db, get_connection, get_total_income, get_total_expenses_by_category, insert_expense
 from notifications.whatsapp import send_alert
 
 logging.basicConfig(
@@ -201,6 +202,128 @@ def nightly_job():
 
 
 # ---------------------------------------------------------------------------
+# Saturday reconciliation job
+# ---------------------------------------------------------------------------
+
+def saturday_reconciliation():
+    """
+    Full-month BilBoy reconciliation — runs every Saturday.
+
+    Fetches ALL invoices from BilBoy API for the current month and compares
+    against DB.  Inserts missing invoices and deletes DB rows that no longer
+    exist in the API (BilBoy is the source of truth).
+    """
+    today = date.today()
+    from_date = date(today.year, today.month, 1).isoformat()
+    to_date = today.isoformat()
+    logger.info("=== Saturday reconciliation started (%s to %s) ===", from_date, to_date)
+
+    try:
+        agent = BilBoyAgent()
+        api_records = agent._fetch_invoices(from_date=from_date, to_date=to_date)
+        logger.info("[reconciliation] API returned %d invoices", len(api_records))
+    except Exception as exc:
+        logger.error("[reconciliation] Failed to fetch from API: %s", exc)
+        send_alert(
+            f"\u274c \u05d4\u05ea\u05d0\u05de\u05d4 \u05e9\u05d1\u05d5\u05e2\u05d9\u05ea BilBoy \u05e0\u05db\u05e9\u05dc\u05d4: {exc}",
+            force=True,
+        )
+        return
+
+    # Build set of API keys: (date, amount, description)
+    api_set = set()
+    api_by_key: dict[tuple, dict] = {}
+    for r in api_records:
+        key = (r["date"], r["amount"], r["description"])
+        api_set.add(key)
+        api_by_key[key] = r
+
+    # Build set of DB keys
+    with get_connection() as conn:
+        db_rows = conn.execute(
+            "SELECT id, date, amount, description FROM expenses "
+            "WHERE category='goods' AND source='bilboy' "
+            "AND date >= ? AND date <= ?",
+            (from_date, to_date),
+        ).fetchall()
+
+    db_set = set()
+    db_by_key: dict[tuple, list[int]] = {}
+    for row in db_rows:
+        key = (row[1], float(row[2]), row[3])
+        db_set.add(key)
+        db_by_key.setdefault(key, []).append(row[0])
+
+    # --- Insert: in API but not in DB ---
+    to_insert = api_set - db_set
+    inserted_count = 0
+    inserted_amount = 0.0
+    for key in sorted(to_insert):
+        r = api_by_key[key]
+        insert_expense(
+            date=r["date"], category="goods",
+            amount=r["amount"], description=r["description"],
+            source="bilboy",
+        )
+        inserted_count += 1
+        inserted_amount += r["amount"]
+        logger.info("[reconciliation] Inserted: %s | %s | %.2f", r["date"], r["description"], r["amount"])
+
+    # --- Delete: in DB but not in API ---
+    to_delete = db_set - api_set
+    deleted_count = 0
+    deleted_amount = 0.0
+    with get_connection() as conn:
+        for key in sorted(to_delete):
+            for row_id in db_by_key[key]:
+                conn.execute("DELETE FROM expenses WHERE id = ?", (row_id,))
+                deleted_count += 1
+                deleted_amount += key[1]
+                logger.info("[reconciliation] Deleted id=%d: %s | %s | %.2f", row_id, key[0], key[2], key[1])
+
+    # Final month total
+    goods_total = get_total_expenses_by_category(today.month, today.year).get("goods", 0)
+
+    # --- Telegram summary ---
+    if inserted_count == 0 and deleted_count == 0:
+        msg = (
+            "\U0001f504 \u05d4\u05ea\u05d0\u05de\u05d4 \u05e9\u05d1\u05d5\u05e2\u05d9\u05ea \u2014 BilBoy\n"
+            f"\U0001f4c5 {date(today.year, today.month, 1).strftime('%d/%m/%Y')} "
+            f"\u05e2\u05d3 {today.strftime('%d/%m/%Y')}\n\n"
+            f"\u2705 \u05d4\u05db\u05dc \u05de\u05e1\u05d5\u05e0\u05db\u05e8\u05df \u2014 "
+            f"\u05d0\u05d9\u05df \u05d4\u05e4\u05e8\u05e9\u05d9\u05dd"
+        )
+    else:
+        lines = [
+            f"\U0001f504 \u05d4\u05ea\u05d0\u05de\u05d4 \u05e9\u05d1\u05d5\u05e2\u05d9\u05ea \u2014 BilBoy",
+            f"\U0001f4c5 {date(today.year, today.month, 1).strftime('%d/%m/%Y')} "
+            f"\u05e2\u05d3 {today.strftime('%d/%m/%Y')}",
+            "",
+        ]
+        if inserted_count:
+            lines.append(
+                f"\u2705 \u05e0\u05d5\u05e1\u05e4\u05d5: {inserted_count} \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea"
+                f" | \u20aa{inserted_amount:,.2f}"
+            )
+        if deleted_count:
+            lines.append(
+                f"\U0001f5d1\ufe0f \u05e0\u05de\u05d7\u05e7\u05d5: {deleted_count} \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea"
+                f" | \u20aa{deleted_amount:,.2f}"
+            )
+        lines.append(
+            f"\U0001f4b0 \u05e1\u05d4\u05f4\u05db {_format_month(today)} "
+            f"\u05d0\u05d7\u05e8\u05d9 \u05d4\u05ea\u05d0\u05de\u05d4: \u20aa{goods_total:,.2f}"
+        )
+        msg = "\n".join(lines)
+
+    send_alert(msg, force=True)
+    logger.info(
+        "=== Saturday reconciliation complete — %d inserted, %d deleted ===",
+        inserted_count, deleted_count,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -222,8 +345,18 @@ if __name__ == "__main__":
         name="Nightly agents (02:00 IL)",
         replace_existing=True,
     )
+    scheduler.add_job(
+        saturday_reconciliation,
+        trigger="cron",
+        day_of_week="sat",
+        hour=2,
+        minute=30,
+        id="saturday_reconciliation",
+        name="Saturday BilBoy reconciliation (02:30 IL)",
+        replace_existing=True,
+    )
 
-    logger.info("Scheduler started — nightly job at 02:00 Asia/Jerusalem. Press Ctrl+C to stop.")
+    logger.info("Scheduler started — nightly 02:00, reconciliation Sat 02:30. Press Ctrl+C to stop.")
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):

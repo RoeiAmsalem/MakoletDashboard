@@ -152,7 +152,7 @@ function renderKpis(section, d) {
             <span class="ratio-label">יום ${d.days_passed} מתוך ${d.days_in_month} · ${pct}% מהחודש</span>
         </div>
 
-        <div class="kpi-card kpi-card--income">
+        <div class="kpi-card kpi-card--income" style="cursor:pointer" onclick="location.href='/sales'">
             <div class="kpi-header">
                 <span class="kpi-icon">📈</span>
                 <span class="kpi-label">הכנסות</span>
@@ -160,7 +160,7 @@ function renderKpis(section, d) {
             <span class="kpi-value profit">${formatMoney(d.income)}</span>
         </div>
 
-        <div class="kpi-card kpi-card--goods">
+        <div class="kpi-card kpi-card--goods" style="cursor:pointer" onclick="location.href='/goods'">
             <div class="kpi-header">
                 <span class="kpi-icon">🛒</span>
                 <span class="kpi-label">סחורה (BilBoy)</span>
@@ -168,7 +168,7 @@ function renderKpis(section, d) {
             <span class="kpi-value loss">${formatMoney(d.goods)}</span>
         </div>
 
-        <div class="kpi-card kpi-card--fixed">
+        <div class="kpi-card kpi-card--fixed" style="cursor:pointer" onclick="location.href='/fixed-expenses'">
             <div class="kpi-header">
                 <span class="kpi-icon">🏠</span>
                 <span class="kpi-label">הוצאות קבועות</span>
@@ -176,7 +176,7 @@ function renderKpis(section, d) {
             <span class="kpi-value fixed">${formatMoney(d.fixed_prorated)}</span>
         </div>
 
-        <div class="kpi-card kpi-card--salary">
+        <div class="kpi-card kpi-card--salary" style="cursor:pointer" onclick="location.href='/employees'">
             <div class="kpi-header">
                 <span class="kpi-icon">👷</span>
                 <span class="kpi-label">שכר עובדים</span>

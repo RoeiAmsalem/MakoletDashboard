@@ -170,6 +170,18 @@ def employees():
     return render_template("employees.html")
 
 
+@app.route("/goods")
+@login_required
+def goods():
+    return render_template("goods.html")
+
+
+@app.route("/sales")
+@login_required
+def sales():
+    return render_template("sales.html")
+
+
 @app.route("/electricity-history")
 @login_required
 def electricity_history():

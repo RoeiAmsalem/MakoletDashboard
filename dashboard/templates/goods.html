@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>סחורה - מכולת דשבורד</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<nav class="navbar">
+    <div class="navbar-brand">
+        <span class="store-name">🏪 מכולת</span>
+        <span class="page-title">סחורה</span>
+    </div>
+    <nav>
+        <ul class="navbar-nav">
+            <li><a href="/">בית</a></li>
+            <li class="nav-dropdown">
+                <a href="/fixed-expenses" class="dropdown-toggle">הוצאות קבועות ▾</a>
+                <ul class="dropdown-menu">
+                    <li><a href="/fixed-expenses">הוצאות קבועות</a></li>
+                    <li><a href="/electricity-history" style="color:#fbbf24">היסטוריית חשמל ⚡</a></li>
+                </ul>
+            </li>
+            <li><a href="/employees">עובדים</a></li>
+        </ul>
+    </nav>
+    <div class="navbar-end">
+        <span class="navbar-user">
+            {{ current_user.username }}
+            {% if current_user.is_admin %}
+            <span class="role-badge admin">מנהל</span>
+            {% else %}
+            <span class="role-badge viewer">צופה</span>
+            {% endif %}
+        </span>
+        <a href="{{ url_for('logout') }}" class="btn-logout">יציאה</a>
+    </div>
+</nav>
+
+<main class="main-content" style="display:flex;align-items:center;justify-content:center;min-height:60vh">
+    <h1 style="color:var(--text-muted);font-size:2rem">סחורה — בקרוב</h1>
+</main>
+
+</body>
+</html>

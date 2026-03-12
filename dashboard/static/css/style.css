@@ -527,17 +527,109 @@ body {
     text-align: center;
 }
 
+/* --- Hamburger button ---------------------------------------- */
+.hamburger {
+    display: none;
+    background: transparent;
+    border: none;
+    color: white;
+    font-size: 1.4rem;
+    cursor: pointer;
+    padding: 0.25rem;
+    line-height: 1;
+}
+
+/* --- Mobile nav panel ---------------------------------------- */
+.mobile-nav {
+    display: none;
+}
+
+/* --- Month switcher (mobile row) ----------------------------- */
+.month-switcher-mobile {
+    display: none;
+}
+
 /* --- Responsive --------------------------------------------- */
-@media (max-width: 600px) {
+@media (max-width: 768px) {
+    .hamburger {
+        display: block;
+    }
+
     .navbar {
         flex-wrap: wrap;
         height: auto;
-        padding: 0.75rem 1rem;
-        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        gap: 0;
     }
-    .navbar-nav  { display: none; }
-    .navbar-user { display: none; }
-    .navbar-meta { display: none; }
+
+    /* Top row: logo right, hamburger left */
+    .navbar-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+    }
+
+    /* Hide desktop nav items */
+    .navbar > nav,
+    .navbar-end {
+        display: none !important;
+    }
+
+    /* Mobile nav links panel */
+    .mobile-nav {
+        display: none;
+        flex-direction: column;
+        width: 100%;
+    }
+    .mobile-nav.open {
+        display: flex;
+    }
+    .mobile-nav a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        padding: 10px 16px;
+        border-bottom: 1px solid rgba(255,255,255,0.1);
+        font-size: 0.9rem;
+        transition: background 0.15s, color 0.15s;
+    }
+    .mobile-nav a:hover,
+    .mobile-nav a.active {
+        background: rgba(255,255,255,0.08);
+        color: var(--text-light);
+    }
+
+    /* Month switcher visible below navbar on mobile */
+    .month-switcher-mobile {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        padding: 6px 0 4px;
+        font-size: 0.9rem;
+        direction: ltr;
+    }
+    .month-switcher-mobile a {
+        color: #aaa;
+        text-decoration: none;
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.08);
+    }
+    .month-switcher-mobile span.month-label {
+        color: white;
+        font-weight: 600;
+        min-width: 80px;
+        text-align: center;
+    }
+    .month-switcher-mobile span.month-disabled {
+        color: #444;
+        padding: 2px 6px;
+    }
+
+    /* Hide electricity & salary columns on mobile */
+    .hide-mobile { display: none !important; }
 
     .cards-grid {
         grid-template-columns: 1fr;
@@ -556,5 +648,17 @@ body {
         align-items: center;
         justify-content: center;
         padding: 1rem;
+    }
+
+    /* PDF modal fullscreen on mobile */
+    .pdf-modal {
+        width: 98vw !important;
+        max-width: 98vw !important;
+        height: 95vh;
+        margin: 0;
+        border-radius: 8px;
+    }
+    .pdf-modal #pdf-canvas-container {
+        height: calc(95vh - 60px) !important;
     }
 }

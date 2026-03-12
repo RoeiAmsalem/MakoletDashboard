@@ -9,11 +9,14 @@
 <body>
 
 <nav class="navbar">
-    <a href="/" class="navbar-brand" style="text-decoration:none; display:flex; align-items:center;">
-        <img src="{{ url_for('static', filename='makolet_logo.png') }}"
-             alt="רשת המכולה"
-             style="height:42px; width:auto; object-fit:contain; filter:invert(1) hue-rotate(180deg);">
-    </a>
+    <div class="navbar-top">
+        <a href="/" class="navbar-brand" style="text-decoration:none; display:flex; align-items:center;">
+            <img src="{{ url_for('static', filename='makolet_logo.png') }}"
+                 alt="רשת המכולה"
+                 style="height:42px; width:auto; object-fit:contain; filter:invert(1) hue-rotate(180deg);">
+        </a>
+        <button class="hamburger" id="hamburger" aria-label="תפריט">&#9776;</button>
+    </div>
     <nav>
         <ul class="navbar-nav">
             <li><a href="/" class="active">בית</a></li>
@@ -46,6 +49,21 @@
             {% endif %}
         </span>
         <a href="{{ url_for('logout') }}" class="btn-logout">יציאה</a>
+    </div>
+    <div class="mobile-nav" id="mobile-nav">
+        <a href="/" class="active">בית</a>
+        <a href="/fixed-expenses">הוצאות קבועות</a>
+        <a href="/electricity-history" style="color:#fbbf24">היסטוריית חשמל ⚡</a>
+        <a href="/employees">עובדים</a>
+    </div>
+    <div class="month-switcher-mobile">
+        <a href="/?month={{ prev_month }}">‹</a>
+        <span class="month-label">{{ month_display }}</span>
+        {% if next_month %}
+        <a href="/?month={{ next_month }}">›</a>
+        {% else %}
+        <span class="month-disabled">›</span>
+        {% endif %}
     </div>
 </nav>
 
@@ -81,9 +99,9 @@
                         <th>חודש</th>
                         <th>הכנסות</th>
                         <th>סחורה</th>
-                        <th>חשמל</th>
+                        <th class="hide-mobile">חשמל</th>
                         <th>הוצאות קבועות</th>
-                        <th>שכר</th>
+                        <th class="hide-mobile">שכר</th>
                         <th>רווח</th>
                         <th>סטטוס</th>
                     </tr>
@@ -240,9 +258,9 @@ function renderTable(months, tbody) {
                 <td>${m.label}</td>
                 <td class="money profit">${formatMoney(m.income)}</td>
                 <td class="money loss">${formatMoney(m.goods)}</td>
-                <td class="money loss">${formatMoney(m.electricity)}</td>
+                <td class="money loss hide-mobile">${formatMoney(m.electricity)}</td>
                 <td class="money fixed">${formatMoney(m.fixed_prorated)}</td>
-                <td class="money salary">${formatMoney(m.salary)}</td>
+                <td class="money salary hide-mobile">${formatMoney(m.salary)}</td>
                 <td class="money ${profitClass}">${formatMoney(m.profit)}</td>
                 <td>${badge}</td>
             </tr>
@@ -253,6 +271,11 @@ function renderTable(months, tbody) {
 // ── Boot ───────────────────────────────────────────────────────
 loadSummary();
 loadHistory();
+
+// Hamburger menu toggle
+document.getElementById('hamburger').addEventListener('click', function() {
+    document.getElementById('mobile-nav').classList.toggle('open');
+});
 </script>
 </body>
 </html>

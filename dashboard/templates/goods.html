@@ -9,11 +9,14 @@
 <body>
 
 <nav class="navbar">
-    <a href="/" class="navbar-brand" style="text-decoration:none; display:flex; align-items:center;">
-        <img src="{{ url_for('static', filename='makolet_logo.png') }}"
-             alt="רשת המכולה"
-             style="height:42px; width:auto; object-fit:contain; filter:invert(1) hue-rotate(180deg);">
-    </a>
+    <div class="navbar-top">
+        <a href="/" class="navbar-brand" style="text-decoration:none; display:flex; align-items:center;">
+            <img src="{{ url_for('static', filename='makolet_logo.png') }}"
+                 alt="רשת המכולה"
+                 style="height:42px; width:auto; object-fit:contain; filter:invert(1) hue-rotate(180deg);">
+        </a>
+        <button class="hamburger" id="hamburger" aria-label="תפריט">&#9776;</button>
+    </div>
     <nav>
         <ul class="navbar-nav">
             <li><a href="/">בית</a></li>
@@ -38,7 +41,19 @@
         </span>
         <a href="{{ url_for('logout') }}" class="btn-logout">יציאה</a>
     </div>
+    <div class="mobile-nav" id="mobile-nav">
+        <a href="/">בית</a>
+        <a href="/fixed-expenses">הוצאות קבועות</a>
+        <a href="/electricity-history" style="color:#fbbf24">היסטוריית חשמל ⚡</a>
+        <a href="/employees">עובדים</a>
+    </div>
 </nav>
+
+<script>
+document.getElementById('hamburger').addEventListener('click', function() {
+    document.getElementById('mobile-nav').classList.toggle('open');
+});
+</script>
 
 <main class="main-content" style="display:flex;align-items:center;justify-content:center;min-height:60vh">
     <h1 style="color:var(--text-muted);font-size:2rem">סחורה — בקרוב</h1>

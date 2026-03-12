@@ -128,6 +128,7 @@
         .btn-close-modal:hover { color: var(--text-primary); }
         .pdf-modal #pdf-canvas-container {
             flex: 1;
+            min-height: 0;
         }
     </style>
 </head>
@@ -210,8 +211,8 @@
                 <button class="btn-close-modal" id="pdf-close">&times;</button>
             </div>
         </div>
-        <div id="pdf-canvas-container" style="width:100%; height:75vh; overflow:auto; background:#525659; border-radius:4px;">
-            <canvas id="pdf-canvas" style="display:block; margin:0 auto;"></canvas>
+        <div id="pdf-canvas-container" style="width:100%; height:75vh; overflow-y:auto; background:#525659; border-radius:4px; text-align:center;">
+            <div id="pdf-pages"></div>
         </div>
     </div>
 </div>
@@ -237,8 +238,8 @@ function fmtDate(dateStr) {
 }
 
 // ── PDF modal ────────────────────────────────────────────────
-const overlay   = document.getElementById('pdf-overlay');
-const dlLink    = document.getElementById('pdf-download-link');
+const overlay    = document.getElementById('pdf-overlay');
+const dlLink     = document.getElementById('pdf-download-link');
 const modalTitle = document.getElementById('pdf-modal-title');
 
 async function openPdf(dateStr) {
@@ -246,63 +247,31 @@ async function openPdf(dateStr) {
     dlLink.href = `/api/sales/pdf/${dateStr}`;
     overlay.classList.add('active');
 
-    // Clear previous extra canvases
-    const container = document.getElementById('pdf-canvas-container');
-    container.querySelectorAll('canvas:not(#pdf-canvas)').forEach(c => c.remove());
+    const container = document.getElementById('pdf-pages');
+    container.innerHTML = '<p style="color:white; padding:20px;">טוען...</p>';
 
-    const canvas = document.getElementById('pdf-canvas');
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-    try {
-        const response = await fetch(`/api/sales/pdf/${dateStr}`);
-        const arrayBuffer = await response.arrayBuffer();
-        const pdf = await pdfjsLib.getDocument({
-            data: arrayBuffer,
-            useSystemFonts: true,
-            disableFontFace: false,
-            cMapUrl: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/',
-            cMapPacked: true,
-        }).promise;
-
-        const containerWidth = container.clientWidth - 32;
-
-        for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const viewport = page.getViewport({ scale: 1 });
-            const scale = (containerWidth / viewport.width) * 1.5;
-            const scaledViewport = page.getViewport({ scale });
-
-            let c = (i === 1) ? canvas : document.createElement('canvas');
-            c.width = scaledViewport.width;
-            c.height = scaledViewport.height;
-            c.style.display = 'block';
-            c.style.margin = '4px auto';
-            if (i > 1) container.appendChild(c);
-
-            await page.render({ canvasContext: c.getContext('2d'), viewport: scaledViewport }).promise;
-        }
-    } catch (e) {
-        canvas.width = 500;
-        canvas.height = 80;
-        const c2 = canvas.getContext('2d');
-        c2.fillStyle = 'white';
-        c2.font = '14px Arial';
-        c2.fillText('שגיאה: ' + e.message, 10, 40);
-        console.error('PDF.js error:', e);
+    // Fetch page images rendered server-side by PyMuPDF
+    let page = 1;
+    container.innerHTML = '';
+    while (true) {
+        const url = `/api/sales/pdf-image/${dateStr}/${page}`;
+        const res = await fetch(url, { method: 'HEAD' });
+        if (!res.ok) break;
+        const img = document.createElement('img');
+        img.src = url;
+        img.style.cssText = 'display:block; width:100%; max-width:800px; margin:4px auto; box-shadow:0 2px 8px rgba(0,0,0,0.4);';
+        container.appendChild(img);
+        page++;
+        if (page > 20) break; // safety limit
+    }
+    if (container.children.length === 0) {
+        container.innerHTML = '<p style="color:white; padding:20px;">שגיאה בטעינת PDF</p>';
     }
 }
 
 function closePdf() {
     overlay.classList.remove('active');
-    const container = document.getElementById('pdf-canvas-container');
-    container.querySelectorAll('canvas:not(#pdf-canvas)').forEach(c => c.remove());
-    const canvas = document.getElementById('pdf-canvas');
-    const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    document.getElementById('pdf-pages').innerHTML = '';
 }
 
 document.getElementById('pdf-close').addEventListener('click', closePdf);
@@ -400,6 +369,5 @@ async function loadSales() {
 
 loadSales();
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 </body>
 </html>

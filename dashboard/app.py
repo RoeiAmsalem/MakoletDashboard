@@ -369,6 +369,32 @@ def api_sales_pdf(date_str):
     return response
 
 
+@app.route("/api/sales/pdf-image/<date_str>/<int:page>")
+@login_required
+def api_sales_pdf_image(date_str, page):
+    """Render a Z-report PDF page as PNG using PyMuPDF."""
+    import fitz
+
+    if not re.match(r'^\d{4}-\d{2}-\d{2}$', date_str):
+        abort(400)
+    pdf_path = os.path.join(_Z_PDFS_DIR, f"z_{date_str}.pdf")
+    if not os.path.isfile(pdf_path):
+        abort(404)
+    doc = fitz.open(pdf_path)
+    if page < 1 or page > len(doc):
+        doc.close()
+        abort(404)
+    pg = doc[page - 1]
+    mat = fitz.Matrix(2, 2)
+    pix = pg.get_pixmap(matrix=mat)
+    img_bytes = pix.tobytes("png")
+    doc.close()
+    response = make_response(img_bytes)
+    response.headers["Content-Type"] = "image/png"
+    response.headers["Cache-Control"] = "public, max-age=3600"
+    return response
+
+
 @app.route("/api/history")
 @login_required
 def api_history():

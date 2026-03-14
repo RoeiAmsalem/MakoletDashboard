@@ -113,13 +113,13 @@ class EmployeeHoursAgent(BaseAgent):
         return mail
 
     def _search_unread_emails(self, mail: imaplib.IMAP4_SSL) -> list[bytes]:
-        """Search for UNREAD attendance emails from Aviv sender.
+        """Search for UNREAD attendance emails.
 
-        Note: IMAP SUBJECT search with Hebrew causes ASCII encoding errors,
-        so we search by FROM+UNSEEN only and filter by subject client-side.
+        IMAP SUBJECT search with Hebrew causes ASCII encoding errors,
+        so we search by UNSEEN only and filter by subject client-side.
+        The email may come from avivpost or forwarded via another address.
         """
-        criteria = f'(UNSEEN FROM "{self._sender_email}")'
-        status, data = mail.search(None, criteria)
+        status, data = mail.search(None, "UNSEEN")
         if status != "OK" or not data or not data[0]:
             return []
 
@@ -131,7 +131,6 @@ class EmployeeHoursAgent(BaseAgent):
             if status2 != "OK":
                 continue
             raw_header = header_data[0][1]
-            # Decode the subject header
             subject_raw = email.header.decode_header(
                 email.message_from_bytes(raw_header).get("Subject", "")
             )

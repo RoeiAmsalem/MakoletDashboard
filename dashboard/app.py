@@ -241,6 +241,15 @@ def api_summary():
     """Return KPIs and estimated profit for ?month=YYYY-MM (default: current)."""
     selected = _parse_month_param()
     data = calculate_estimated_profit(selected.month, selected.year)
+    # Count unmatched employees (total_salary=0 in employee_monthly_hours)
+    month_str = selected.strftime("%Y-%m")
+    from database.db import get_connection
+    with get_connection() as conn:
+        unmatched = conn.execute(
+            "SELECT COUNT(*) FROM employee_monthly_hours WHERE month = ? AND total_salary = 0",
+            (month_str,),
+        ).fetchone()[0]
+    data["unmatched_employees"] = unmatched
     return jsonify(data)
 
 
@@ -302,7 +311,19 @@ def api_employees_list():
             "is_finalized": bool(h["is_finalized"]) if h else False,
             "hours_row_id": h["id"] if h else None,
         })
-    return jsonify(result)
+
+    # Include unmatched employees from employee_monthly_hours (total_salary=0)
+    month_str = today.strftime("%Y-%m")
+    from database.db import get_connection
+    with get_connection() as conn:
+        unmatched_rows = conn.execute(
+            "SELECT employee_name, total_hours FROM employee_monthly_hours "
+            "WHERE month = ? AND total_salary = 0",
+            (month_str,),
+        ).fetchall()
+    unmatched = [{"name": r[0], "hours": r[1]} for r in unmatched_rows]
+
+    return jsonify({"employees": result, "unmatched": unmatched})
 
 
 @app.route("/api/employees", methods=["POST"])
@@ -363,6 +384,7 @@ def api_employees_update(employee_id: int):
 @app.route("/api/employees/upload-csv", methods=["POST"])
 @login_required
 def api_employees_upload_csv():
+    # deprecated — use automatic EmployeeHoursAgent instead
     """Accept CSV file upload, parse attendance, match to DB employees, save monthly hours."""
     if not current_user.is_admin:
         return jsonify({"error": "admin only"}), 403

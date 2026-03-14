@@ -253,124 +253,42 @@
             cursor: pointer; font-family: inherit;
         }
 
-        /* CSV upload button */
-        .btn-upload-csv {
-            font-size: 0.82rem;
+        /* Unmatched warning */
+        .unmatched-warning {
+            background: rgba(250,204,21,0.1);
+            border: 1px solid rgba(250,204,21,0.35);
+            border-radius: var(--radius);
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.25rem;
+        }
+        .unmatched-warning-title {
             font-weight: 700;
-            padding: 0.4rem 0.85rem;
-            background: rgba(34,197,94,0.15);
-            border: 1px solid rgba(34,197,94,0.45);
-            border-radius: 6px;
-            color: #86efac;
+            color: #fde68a;
+            font-size: 0.92rem;
+            margin-bottom: 0.5rem;
+        }
+        .unmatched-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.35rem 0;
+            border-bottom: 1px solid rgba(250,204,21,0.1);
+            font-size: 0.85rem;
+        }
+        .unmatched-row:last-child { border-bottom: none; }
+        .unmatched-name { color: #fde68a; }
+        .unmatched-hours { color: var(--text-secondary); direction: ltr; }
+        .btn-add-unmatched {
+            font-size: 0.72rem;
+            padding: 0.15rem 0.5rem;
+            background: rgba(59,130,246,0.15);
+            border: 1px solid rgba(59,130,246,0.4);
+            border-radius: 4px;
+            color: #93c5fd;
             cursor: pointer;
             font-family: inherit;
-            transition: background 0.15s;
-            white-space: nowrap;
         }
-        .btn-upload-csv:hover { background: rgba(34,197,94,0.3); }
-
-        .header-buttons { display: flex; gap: 0.5rem; }
-
-        /* Upload modal overlay */
-        .modal-overlay {
-            display: none;
-            position: fixed; inset: 0;
-            background: rgba(0,0,0,0.6);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-overlay.open { display: flex; }
-
-        .modal-box {
-            background: #162032;
-            border: 1px solid rgba(59,130,246,0.3);
-            border-radius: 12px;
-            padding: 1.5rem 2rem;
-            width: 90%;
-            max-width: 480px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-        }
-
-        .modal-title {
-            font-size: 1.1rem;
-            font-weight: 700;
-            color: var(--text-light);
-            margin-bottom: 1rem;
-        }
-
-        .file-drop {
-            border: 2px dashed rgba(59,130,246,0.4);
-            border-radius: 8px;
-            padding: 2rem;
-            text-align: center;
-            color: var(--text-secondary);
-            cursor: pointer;
-            margin-bottom: 1rem;
-            transition: border-color 0.15s;
-        }
-        .file-drop:hover { border-color: #93c5fd; }
-        .file-drop.has-file { border-color: #86efac; color: #86efac; }
-
-        .modal-month {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            margin-bottom: 1rem;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 0.5rem;
-            justify-content: flex-end;
-        }
-
-        /* Upload result section */
-        .upload-result {
-            display: none;
-            margin-top: 1.5rem;
-            border: 1px solid rgba(59,130,246,0.2);
-            border-radius: var(--radius);
-            overflow: hidden;
-        }
-        .upload-result.show { display: block; }
-
-        .result-header {
-            background: rgba(59,130,246,0.1);
-            padding: 0.75rem 1rem;
-            font-weight: 700;
-            font-size: 0.95rem;
-            color: var(--text-light);
-        }
-
-        .result-matched, .result-unmatched {
-            padding: 0.75rem 1rem;
-        }
-
-        .result-matched { background: rgba(34,197,94,0.05); }
-        .result-unmatched { background: rgba(239,68,68,0.05); }
-
-        .result-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.4rem 0;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            font-size: 0.88rem;
-        }
-        .result-row:last-child { border-bottom: none; }
-
-        .result-name { color: var(--text-light); }
-        .result-hours { color: var(--text-secondary); direction: ltr; }
-        .result-salary { color: #86efac; font-weight: 600; direction: ltr; }
-        .result-unmatched-name { color: #fca5a5; }
-
-        .result-total {
-            padding: 0.75rem 1rem;
-            background: rgba(59,130,246,0.1);
-            display: flex;
-            justify-content: space-between;
-            font-weight: 700;
-            font-size: 1rem;
-        }
+        .btn-add-unmatched:hover { background: rgba(59,130,246,0.3); }
 
         .shift-badge {
             font-size: 0.65rem;
@@ -384,7 +302,6 @@
 
         @media (max-width: 600px) {
             .employee-cards { grid-template-columns: 1fr; }
-            .header-buttons { flex-wrap: wrap; }
         }
     </style>
 </head>
@@ -445,12 +362,9 @@
             <h2 class="section-title" style="margin-bottom:0">
                 👷 עובדים – <span id="month-label"></span>
             </h2>
-            <div class="header-buttons">
-                {% if current_user.is_admin %}
-                <button class="btn-upload-csv" onclick="openUploadModal()">📂 העלה CSV חודשי</button>
-                <button class="btn-add-main" onclick="toggleAddPanel()">+ הוסף עובד</button>
-                {% endif %}
-            </div>
+            {% if current_user.is_admin %}
+            <button class="btn-add-main" onclick="toggleAddPanel()">+ הוסף עובד</button>
+            {% endif %}
         </div>
 
         <!-- Add employee panel -->
@@ -477,36 +391,15 @@
             </div>
         </div>
 
+        <!-- Unmatched employees warning (populated by JS) -->
+        <div id="unmatched-section"></div>
+
         <div class="employee-cards" id="employee-cards">
             <div class="loading"><div class="spinner"></div><span>טוען עובדים...</span></div>
         </div>
-
-        <!-- Upload result -->
-        <div class="upload-result" id="upload-result"></div>
     </section>
 
 </main>
-
-<!-- CSV Upload Modal -->
-<div class="modal-overlay" id="csv-modal">
-    <div class="modal-box">
-        <div class="modal-title">📂 העלאת דוח נוכחות חודשי</div>
-        <div class="file-drop" id="file-drop" onclick="document.getElementById('csv-file').click()">
-            לחץ לבחירת קובץ CSV<br>
-            <span style="font-size:0.78rem;opacity:0.6">או גרור לכאן</span>
-        </div>
-        <input type="file" id="csv-file" accept=".csv" style="display:none">
-        <div class="modal-month">
-            חודש: <strong id="csv-month-display"></strong>
-            <input type="month" id="csv-month-input"
-                   style="background:var(--bg);border:1px solid rgba(59,130,246,0.4);border-radius:4px;padding:0.2rem 0.4rem;color:var(--text-primary);font-family:inherit;font-size:0.85rem;margin-right:0.5rem;direction:ltr">
-        </div>
-        <div class="modal-actions">
-            <button class="btn-cancel-inline" onclick="closeUploadModal()">ביטול</button>
-            <button class="btn-save-inline" id="btn-upload" onclick="uploadCSV()" disabled>📤 העלה</button>
-        </div>
-    </div>
-</div>
 
 <script src="{{ url_for('static', filename='js/charts.js') }}"></script>
 <script>
@@ -525,14 +418,43 @@ async function loadEmployees() {
     try {
         const res = await fetch('/api/employees');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        allEmployees = await res.json();
+        const data = await res.json();
+        allEmployees = data.employees || data;
+        const unmatched = data.unmatched || [];
         renderKpis(kpi, allEmployees);
+        renderUnmatched(unmatched);
         renderCards(cardsEl, allEmployees);
     } catch (err) {
         console.error(err);
         kpi.innerHTML     = '<p class="error-msg">שגיאה בטעינת נתונים.</p>';
         cardsEl.innerHTML = '<p class="error-msg">שגיאה בטעינת נתונים.</p>';
     }
+}
+
+function renderUnmatched(unmatched) {
+    const el = document.getElementById('unmatched-section');
+    if (!unmatched || !unmatched.length) {
+        el.innerHTML = '';
+        return;
+    }
+    let html = '<div class="unmatched-warning">';
+    html += `<div class="unmatched-warning-title">⚠️ עובדים שלא זוהו בדוח החודשי (${unmatched.length})</div>`;
+    for (const u of unmatched) {
+        html += `<div class="unmatched-row">
+            <span class="unmatched-name">${u.name}</span>
+            <span class="unmatched-hours">${u.hours.toFixed(1)} שעות</span>
+            <button class="btn-add-unmatched" onclick="prefillAddEmployee('${u.name.replace(/'/g, "\\'")}')">+ הוסף עובד</button>
+        </div>`;
+    }
+    html += '</div>';
+    el.innerHTML = html;
+}
+
+function prefillAddEmployee(name) {
+    const panel = document.getElementById('add-emp-panel');
+    if (!panel.classList.contains('open')) panel.classList.add('open');
+    document.getElementById('new-name').value = name;
+    document.getElementById('new-rate').focus();
 }
 
 function renderKpis(section, employees) {
@@ -747,129 +669,6 @@ async function saveEmployee(id) {
         btn.disabled    = false;
         btn.textContent = 'שמור';
     }
-}
-
-// ── CSV Upload ────────────────────────────────────────────────
-let selectedFile = null;
-
-function openUploadModal() {
-    const modal = document.getElementById('csv-modal');
-    const monthInput = document.getElementById('csv-month-input');
-    const now = new Date();
-    monthInput.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-    updateMonthDisplay();
-    modal.classList.add('open');
-}
-
-function closeUploadModal() {
-    document.getElementById('csv-modal').classList.remove('open');
-    selectedFile = null;
-    document.getElementById('file-drop').textContent = 'לחץ לבחירת קובץ CSV';
-    document.getElementById('file-drop').classList.remove('has-file');
-    document.getElementById('btn-upload').disabled = true;
-    document.getElementById('csv-file').value = '';
-}
-
-function updateMonthDisplay() {
-    const val = document.getElementById('csv-month-input').value;
-    document.getElementById('csv-month-display').textContent = val;
-}
-
-document.getElementById('csv-month-input').addEventListener('change', updateMonthDisplay);
-
-document.getElementById('csv-file').addEventListener('change', function() {
-    const file = this.files[0];
-    if (file) {
-        selectedFile = file;
-        const drop = document.getElementById('file-drop');
-        drop.textContent = `✓ ${file.name}`;
-        drop.classList.add('has-file');
-        document.getElementById('btn-upload').disabled = false;
-    }
-});
-
-// Drag and drop
-const fileDrop = document.getElementById('file-drop');
-fileDrop.addEventListener('dragover', e => { e.preventDefault(); fileDrop.style.borderColor = '#93c5fd'; });
-fileDrop.addEventListener('dragleave', () => { fileDrop.style.borderColor = ''; });
-fileDrop.addEventListener('drop', e => {
-    e.preventDefault();
-    fileDrop.style.borderColor = '';
-    const file = e.dataTransfer.files[0];
-    if (file) {
-        selectedFile = file;
-        fileDrop.textContent = `✓ ${file.name}`;
-        fileDrop.classList.add('has-file');
-        document.getElementById('btn-upload').disabled = false;
-    }
-});
-
-async function uploadCSV() {
-    if (!selectedFile) return;
-    const btn = document.getElementById('btn-upload');
-    btn.disabled = true;
-    btn.textContent = 'מעלה...';
-
-    const month = document.getElementById('csv-month-input').value;
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('month', month);
-
-    try {
-        const res = await fetch('/api/employees/upload-csv', {
-            method: 'POST',
-            body: formData,
-        });
-        if (!res.ok) {
-            const err = await res.json();
-            throw new Error(err.error || `HTTP ${res.status}`);
-        }
-        const data = await res.json();
-        closeUploadModal();
-        showUploadResult(data);
-        loadEmployees(); // refresh cards
-    } catch (err) {
-        console.error(err);
-        alert(`שגיאה בהעלאה: ${err.message}`);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '📤 העלה';
-    }
-}
-
-function showUploadResult(data) {
-    const el = document.getElementById('upload-result');
-    let html = `<div class="result-header">📊 תוצאות העלאה — ${data.month}</div>`;
-
-    if (data.matched.length) {
-        html += '<div class="result-matched">';
-        html += `<div style="font-size:0.78rem;color:#86efac;font-weight:700;margin-bottom:0.5rem">✅ עובדים שהותאמו (${data.matched.length})</div>`;
-        for (const m of data.matched) {
-            html += `<div class="result-row">
-                <span class="result-name">${m.name}</span>
-                <span class="result-hours">${m.raw_hours} (${m.hours.toFixed(2)} שעות)</span>
-                <span class="result-salary">₪${formatMoney(m.salary)}</span>
-            </div>`;
-        }
-        html += '</div>';
-    }
-
-    if (data.unmatched.length) {
-        html += '<div class="result-unmatched">';
-        html += `<div style="font-size:0.78rem;color:#fca5a5;font-weight:700;margin-bottom:0.5rem">🔴 לא נמצאו במערכת (${data.unmatched.length})</div>`;
-        for (const name of data.unmatched) {
-            html += `<div class="result-row"><span class="result-unmatched-name">${name}</span><span style="color:var(--text-secondary);font-size:0.8rem">יש להוסיף עובד זה למערכת</span></div>`;
-        }
-        html += '</div>';
-    }
-
-    html += `<div class="result-total">
-        <span>סה"כ שכר חודשי</span>
-        <span style="color:#86efac">₪${formatMoney(data.total_salary)}</span>
-    </div>`;
-
-    el.innerHTML = html;
-    el.classList.add('show');
 }
 
 // ── Boot ───────────────────────────────────────────────────────

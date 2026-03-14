@@ -212,6 +212,7 @@ function renderKpis(section, d) {
                 <span class="kpi-label">שכר עובדים</span>
             </div>
             <span class="kpi-value salary">${formatMoney(d.salary)}</span>
+            ${d.unmatched_employees > 0 ? `<span style="font-size:0.75rem;color:#fde68a;margin-top:0.2rem">⚠️ ${d.unmatched_employees} עובדים לא זוהו</span>` : ''}
         </div>
     `;
 }

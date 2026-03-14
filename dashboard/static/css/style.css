@@ -260,13 +260,13 @@ body {
 }
 
 .kpi-card--fixed {
-    background: linear-gradient(135deg, var(--fixed-bg) 0%, #3730a3 100%);
-    border-color: var(--fixed-border);
+    background: linear-gradient(135deg, #92400e, #78350f);
+    border-color: rgba(146, 64, 14, 0.35);
 }
 
 .kpi-card--salary {
-    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
-    border-color: rgba(124,58,237,0.35);
+    background: linear-gradient(135deg, #0f766e, #0d6b63);
+    border-color: rgba(15, 118, 110, 0.35);
 }
 
 /* KPI card internals */

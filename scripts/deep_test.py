@@ -932,11 +932,50 @@ def test_security():
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 12. SUMMARY
+# 13. BILBOY DEEP AUDIT
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_bilboy_audit():
+    header(13, "BILBOY AUDIT — DB MATCHES API FOR CURRENT MONTH")
+
+    ok = True
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bilboy_deep_audit.py")
+
+    if not os.path.isfile(script):
+        ok &= check("bilboy_deep_audit.py exists", False, "script not found")
+        results["BilBoy Audit"] = "fail"
+        return
+
+    ok &= check("bilboy_deep_audit.py exists", True)
+
+    result = subprocess.run(
+        [sys.executable, script],
+        capture_output=True, text=True, timeout=60,
+    )
+
+    if result.stdout:
+        print()
+        for line in result.stdout.strip().splitlines():
+            print(f"  {DIM}{line}{RESET}")
+        print()
+
+    if result.returncode != 0:
+        ok &= check("Audit passed (exit code 0)", False,
+                     f"exit code={result.returncode}")
+        if result.stderr:
+            info("stderr", result.stderr.strip()[:200])
+    else:
+        ok &= check("Audit passed (exit code 0)", True, "DB matches API")
+
+    results["BilBoy Audit"] = "pass" if ok else "fail"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 14. SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════
 
 def print_summary():
-    header(12, "SUMMARY")
+    header(14, "SUMMARY")
 
     icon = {"pass": f"{GREEN}PASS{RESET}", "fail": f"{RED}FAIL{RESET}", "warn": f"{YELLOW}WARN{RESET}"}
     max_len = max(len(k) for k in results)
@@ -981,4 +1020,5 @@ if __name__ == "__main__":
     test_pending_fetches()
     test_agent_approach()
     test_security()
+    test_bilboy_audit()
     print_summary()

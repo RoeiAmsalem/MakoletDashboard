@@ -245,8 +245,8 @@ body {
 }
 
 .kpi-card--income {
-    background: linear-gradient(135deg, var(--profit-bg) 0%, #065f46 100%);
-    border-color: var(--profit-border);
+    background: linear-gradient(135deg, #1e3a5f, #15294a);
+    border-color: rgba(30, 58, 95, 0.35);
 }
 
 .kpi-card--goods {

@@ -71,13 +71,17 @@ def parse_attendance_csv(path_or_bytes) -> list[dict]:
     results = []
     current_name = None
 
+    # Detect delimiter: tab or comma
+    first_line = next((l for l in text.splitlines() if l.strip()), "")
+    delimiter = '\t' if '\t' in first_line else ','
+
     for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
 
-        # Split by tab
-        cols = line.split('\t')
+        # Split by detected delimiter
+        cols = line.split(delimiter)
         first = cols[0].strip()
 
         # Check for summary row

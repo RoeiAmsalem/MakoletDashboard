@@ -71,6 +71,18 @@ CREATE TABLE IF NOT EXISTS agent_logs (
 );
 """
 
+CREATE_EMPLOYEE_MONTHLY_HOURS = """
+CREATE TABLE IF NOT EXISTS employee_monthly_hours (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_name   TEXT    NOT NULL,
+    month           TEXT    NOT NULL,           -- YYYY-MM
+    total_hours     REAL    NOT NULL,
+    total_salary    REAL    NOT NULL,
+    uploaded_at     TEXT    DEFAULT (datetime('now')),
+    UNIQUE(employee_name, month)
+);
+"""
+
 CREATE_PENDING_FETCHES = """
 CREATE TABLE IF NOT EXISTS pending_fetches (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,6 +104,7 @@ ALL_TABLES = [
     CREATE_EMPLOYEE_HOURS,
     CREATE_FIXED_EXPENSES,
     CREATE_AGENT_LOGS,
+    CREATE_EMPLOYEE_MONTHLY_HOURS,
     CREATE_PENDING_FETCHES,
 ]
 
@@ -122,12 +135,22 @@ def _migrate_expenses_columns(conn):
             pass  # Column already exists
     _cleanup_duplicate_electricity(conn)
     _migrate_daily_sales_columns(conn)
+    _migrate_employees_columns(conn)
 
 
 def _migrate_daily_sales_columns(conn):
     """Add pdf_path column to daily_sales if it doesn't exist yet."""
     try:
         conn.execute("ALTER TABLE daily_sales ADD COLUMN pdf_path TEXT")
+        conn.commit()
+    except Exception:
+        pass  # Column already exists
+
+
+def _migrate_employees_columns(conn):
+    """Add shift column to employees if it doesn't exist yet."""
+    try:
+        conn.execute("ALTER TABLE employees ADD COLUMN shift TEXT DEFAULT ''")
         conn.commit()
     except Exception:
         pass  # Column already exists

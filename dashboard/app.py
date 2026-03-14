@@ -49,12 +49,15 @@ from database.db import (
     calculate_estimated_profit,
     delete_employee,
     delete_fixed_expense,
+    get_active_employees,
     get_all_daily_sales,
     get_all_employees,
     get_all_fixed_expenses,
     get_electricity_bills,
     get_electricity_monthly_estimate,
     get_employee_hours,
+    get_employee_monthly_hours,
+    get_total_monthly_salary,
     init_db,
     insert_employee,
     insert_fixed_expense,
@@ -62,6 +65,7 @@ from database.db import (
     update_employee_rate,
     update_fixed_expense_amount,
     upsert_employee_hours,
+    upsert_employee_monthly_hours,
 )
 
 _ELEC_BILLS_DIR = os.path.join(_PROJECT_ROOT, "data", "electricity_bills")
@@ -292,6 +296,7 @@ def api_employees_list():
             "id":           emp["id"],
             "name":         emp["name"],
             "hourly_rate":  emp["hourly_rate"],
+            "shift":        emp["shift"] if "shift" in emp.keys() else "",
             "is_active":    bool(emp["is_active"]),
             "hours_worked": h["hours_worked"] if h else None,
             "is_finalized": bool(h["is_finalized"]) if h else False,
@@ -306,9 +311,12 @@ def api_employees_create():
     body        = request.get_json(force=True)
     name        = (body.get("name") or "").strip()
     hourly_rate = body.get("hourly_rate", 0)
+    shift       = (body.get("shift") or "").strip()
     if not name:
         return jsonify({"error": "name required"}), 400
-    new_id = insert_employee(name, float(hourly_rate))
+    if hourly_rate <= 0:
+        return jsonify({"error": "hourly_rate must be > 0"}), 400
+    new_id = insert_employee(name, float(hourly_rate), shift=shift)
     return jsonify({"ok": True, "id": new_id}), 201
 
 
@@ -350,6 +358,111 @@ def api_employees_update(employee_id: int):
         )
 
     return jsonify({"ok": True})
+
+
+@app.route("/api/employees/upload-csv", methods=["POST"])
+@login_required
+def api_employees_upload_csv():
+    """Accept CSV file upload, parse attendance, match to DB employees, save monthly hours."""
+    if not current_user.is_admin:
+        return jsonify({"error": "admin only"}), 403
+
+    import tempfile
+    from agents.parse_attendance_csv import parse_attendance_csv
+
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "no file uploaded"}), 400
+
+    # Parse CSV
+    try:
+        csv_bytes = f.read()
+        parsed = parse_attendance_csv(csv_bytes)
+    except Exception as e:
+        return jsonify({"error": f"CSV parse error: {e}"}), 400
+
+    if not parsed:
+        return jsonify({"error": "no employee data found in CSV"}), 400
+
+    # Determine month from request or default to current
+    month_str = request.form.get("month", "")
+    if not re.match(r'^\d{4}-\d{2}$', month_str):
+        today = date.today()
+        month_str = today.strftime("%Y-%m")
+
+    # Get all active employees from DB
+    db_employees = get_active_employees()
+
+    matched = []
+    unmatched = []
+
+    for entry in parsed:
+        csv_name = entry["name"].strip()
+        csv_name_lower = csv_name.lower()
+
+        # Find matching employee: db_name in csv_name OR csv_name in db_name
+        match = None
+        for emp in db_employees:
+            db_name = emp["name"].strip()
+            db_name_lower = db_name.lower()
+            if db_name_lower in csv_name_lower or csv_name_lower in db_name_lower:
+                match = emp
+                break
+
+        if match:
+            salary = round(entry["hours"] * match["hourly_rate"], 2)
+            upsert_employee_monthly_hours(
+                employee_name=match["name"],
+                month=month_str,
+                total_hours=entry["hours"],
+                total_salary=salary,
+            )
+            # Also update employee_hours table for compatibility
+            month_num = int(month_str.split("-")[1])
+            year_num = int(month_str.split("-")[0])
+            upsert_employee_hours(
+                employee_id=match["id"],
+                month=month_num,
+                year=year_num,
+                hours_worked=entry["hours"],
+                is_finalized=True,
+            )
+            matched.append({
+                "name": match["name"],
+                "csv_name": csv_name,
+                "hours": entry["hours"],
+                "raw_hours": entry["raw_hours"],
+                "hourly_rate": match["hourly_rate"],
+                "salary": salary,
+            })
+        else:
+            unmatched.append(csv_name)
+
+    total_salary = sum(m["salary"] for m in matched)
+
+    return jsonify({
+        "matched": matched,
+        "unmatched": unmatched,
+        "month": month_str,
+        "total_salary": round(total_salary, 2),
+    })
+
+
+@app.route("/api/employees/summary")
+@login_required
+def api_employees_summary():
+    """Return total salary for a given month from employee_monthly_hours."""
+    month_str = request.args.get("month", "")
+    if not re.match(r'^\d{4}-\d{2}$', month_str):
+        today = date.today()
+        month_str = today.strftime("%Y-%m")
+    total = get_total_monthly_salary(month_str)
+    rows = get_employee_monthly_hours(month_str)
+    return jsonify({
+        "month": month_str,
+        "total_salary": total,
+        "employees": [dict(r) for r in rows],
+    })
 
 
 @app.route("/api/electricity/bills")

@@ -200,11 +200,11 @@ def get_total_expenses_by_category(month: int, year: int) -> dict:
 # employees
 # ---------------------------------------------------------------------------
 
-def insert_employee(name: str, hourly_rate: float) -> int:
+def insert_employee(name: str, hourly_rate: float, shift: str = "") -> int:
     with get_connection() as conn:
         cur = conn.execute(
-            "INSERT INTO employees (name, hourly_rate) VALUES (?, ?)",
-            (name, hourly_rate),
+            "INSERT INTO employees (name, hourly_rate, shift) VALUES (?, ?, ?)",
+            (name, hourly_rate, shift),
         )
         return cur.lastrowid
 
@@ -308,6 +308,45 @@ def get_total_salary_cost(month: int, year: int) -> float:
                JOIN employees e ON e.id = eh.employee_id
                WHERE eh.month = ? AND eh.year = ?""",
             (month, year),
+        ).fetchone()
+        return row["total"]
+
+
+# ---------------------------------------------------------------------------
+# employee_monthly_hours (CSV-uploaded attendance)
+# ---------------------------------------------------------------------------
+
+def upsert_employee_monthly_hours(employee_name: str, month: str,
+                                   total_hours: float, total_salary: float) -> int:
+    """Insert or replace monthly hours for an employee (by name, month=YYYY-MM)."""
+    with get_connection() as conn:
+        conn.execute(
+            """INSERT INTO employee_monthly_hours (employee_name, month, total_hours, total_salary)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(employee_name, month)
+               DO UPDATE SET total_hours=excluded.total_hours,
+                             total_salary=excluded.total_salary,
+                             uploaded_at=datetime('now')""",
+            (employee_name, month, total_hours, total_salary),
+        )
+        return conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+
+
+def get_employee_monthly_hours(month: str) -> list[sqlite3.Row]:
+    """Return all employee_monthly_hours rows for a given YYYY-MM month."""
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM employee_monthly_hours WHERE month = ? ORDER BY employee_name",
+            (month,),
+        ).fetchall()
+
+
+def get_total_monthly_salary(month: str) -> float:
+    """Sum of total_salary from employee_monthly_hours for a given YYYY-MM month."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(total_salary), 0) AS total FROM employee_monthly_hours WHERE month = ?",
+            (month,),
         ).fetchone()
         return row["total"]
 

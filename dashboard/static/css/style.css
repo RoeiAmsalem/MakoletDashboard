@@ -250,8 +250,13 @@ body {
 }
 
 .kpi-card--goods {
-    background: linear-gradient(135deg, var(--loss-bg) 0%, #991b1b 100%);
-    border-color: var(--loss-border);
+    background: linear-gradient(135deg, #4c8ffb 0%, #2563eb 100%);
+    border-color: rgba(76,143,251,0.35);
+}
+
+.kpi-card--neutral {
+    background: linear-gradient(135deg, #2a2a4a 0%, #1a1a3a 100%);
+    border-color: rgba(100,100,140,0.3);
 }
 
 .kpi-card--fixed {
@@ -260,8 +265,8 @@ body {
 }
 
 .kpi-card--salary {
-    background: linear-gradient(135deg, var(--salary-bg) 0%, #1d4ed8 100%);
-    border-color: var(--salary-border);
+    background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%);
+    border-color: rgba(124,58,237,0.35);
 }
 
 /* KPI card internals */

@@ -39,6 +39,9 @@
             {% else %}
             <span style="color:#444; padding:2px 6px;">›</span>
             {% endif %}
+            {% if selected_month != now().strftime('%Y-%m') %}
+            <a href="/goods?month={{ now().strftime('%Y-%m') }}" title="חזור לחודש נוכחי" style="color:#f59e0b; text-decoration:none; padding:2px 7px; border-radius:4px; background:rgba(245,158,11,0.15); font-size:0.8rem; font-weight:600;">היום</a>
+            {% endif %}
         </div>
         <span class="navbar-user">
             {{ current_user.username }}
@@ -63,6 +66,9 @@
         <a href="/goods?month={{ next_month }}">›</a>
         {% else %}
         <span class="month-disabled">›</span>
+        {% endif %}
+        {% if selected_month != now().strftime('%Y-%m') %}
+        <a href="/goods?month={{ now().strftime('%Y-%m') }}" style="color:#f59e0b; text-decoration:none; padding:2px 7px; border-radius:4px; background:rgba(245,158,11,0.15); font-size:0.8rem; font-weight:600;">היום</a>
         {% endif %}
     </div>
 </nav>

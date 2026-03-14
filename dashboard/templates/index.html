@@ -39,6 +39,9 @@
             {% else %}
             <span style="color:#444; padding:2px 6px;">›</span>
             {% endif %}
+            {% if selected_month != now().strftime('%Y-%m') %}
+            <a href="/?month={{ now().strftime('%Y-%m') }}" title="חזור לחודש נוכחי" style="color:#f59e0b; text-decoration:none; padding:2px 7px; border-radius:4px; background:rgba(245,158,11,0.15); font-size:0.8rem; font-weight:600;">היום</a>
+            {% endif %}
         </div>
         <span class="navbar-user">
             {{ current_user.username }}
@@ -63,6 +66,9 @@
         <a href="/?month={{ next_month }}">›</a>
         {% else %}
         <span class="month-disabled">›</span>
+        {% endif %}
+        {% if selected_month != now().strftime('%Y-%m') %}
+        <a href="/?month={{ now().strftime('%Y-%m') }}" style="color:#f59e0b; text-decoration:none; padding:2px 7px; border-radius:4px; background:rgba(245,158,11,0.15); font-size:0.8rem; font-weight:600;">היום</a>
         {% endif %}
     </div>
 </nav>
@@ -152,9 +158,10 @@ async function loadSummary() {
 }
 
 function renderKpis(section, d) {
-    const profitPositive  = d.profit >= 0;
-    const profitCardClass = profitPositive ? 'kpi-card--profit' : 'kpi-card--loss';
-    const profitValClass  = profitPositive ? 'profit' : 'loss';
+    const profitCardClass = d.profit > 0 ? 'kpi-card--profit'
+                          : d.profit < 0 ? 'kpi-card--loss'
+                          : 'kpi-card--neutral';
+    const profitValClass  = d.profit >= 0 ? 'profit' : 'loss';
     const badgeClass      = d.is_finalized ? 'finalized' : 'estimated';
     const onlyElectricity = !d.income && !d.goods && !d.salary && d.electricity > 0;
     const badgeText       = d.is_finalized ? 'סופי'
@@ -195,7 +202,7 @@ function renderKpis(section, d) {
                 <span class="kpi-icon">🛒</span>
                 <span class="kpi-label">סחורה (BilBoy)</span>
             </div>
-            <span class="kpi-value loss">${formatMoney(d.goods)}</span>
+            <span class="kpi-value" style="color:#fff">${formatMoney(d.goods)}</span>
         </div>
 
         <div class="kpi-card kpi-card--fixed" style="cursor:pointer" onclick="location.href='/fixed-expenses'">

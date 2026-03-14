@@ -330,7 +330,15 @@
         </ul>
     </nav>
     <div class="navbar-end">
-        <span id="current-month" class="navbar-meta"></span>
+        <div style="display:flex; align-items:center; gap:6px; font-size:0.9rem; direction:ltr;">
+            <a href="/employees?month={{ prev_month }}" style="color:#aaa; text-decoration:none; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.08);">‹</a>
+            <span style="color:white; font-weight:600; min-width:80px; text-align:center;">{{ month_display }}</span>
+            {% if next_month %}
+            <a href="/employees?month={{ next_month }}" style="color:#aaa; text-decoration:none; padding:2px 6px; border-radius:4px; background:rgba(255,255,255,0.08);">›</a>
+            {% else %}
+            <span style="color:#444; padding:2px 6px;">›</span>
+            {% endif %}
+        </div>
         <span class="navbar-user">
             {{ current_user.username }}
             {% if current_user.is_admin %}
@@ -346,6 +354,15 @@
         <a href="/fixed-expenses">הוצאות קבועות</a>
         <a href="/electricity-history" style="color:#fbbf24">היסטוריית חשמל ⚡</a>
         <a href="/employees" class="active">עובדים</a>
+    </div>
+    <div class="month-switcher-mobile">
+        <a href="/employees?month={{ prev_month }}">‹</a>
+        <span class="month-label">{{ month_display }}</span>
+        {% if next_month %}
+        <a href="/employees?month={{ next_month }}">›</a>
+        {% else %}
+        <span class="month-disabled">›</span>
+        {% endif %}
     </div>
 </nav>
 
@@ -405,9 +422,9 @@
 <script>
 'use strict';
 
-const monthStr = new Date().toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
-document.getElementById('current-month').textContent = monthStr;
-document.getElementById('month-label').textContent   = monthStr;
+const SELECTED_MONTH = {{ selected_month | tojson }};
+const monthLabel = {{ month_display | tojson }};
+document.getElementById('month-label').textContent = monthLabel;
 
 let allEmployees = [];
 
@@ -416,7 +433,7 @@ async function loadEmployees() {
     const kpi     = document.getElementById('kpi-section');
     const cardsEl = document.getElementById('employee-cards');
     try {
-        const res = await fetch('/api/employees');
+        const res = await fetch(`/api/employees?month=${SELECTED_MONTH}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         allEmployees = data.employees || data;

@@ -34,7 +34,7 @@ from dateutil.relativedelta import relativedelta
 
 import re
 
-from flask import Flask, abort, jsonify, make_response, redirect, render_template, request, send_file, send_from_directory, url_for
+from flask import Flask, abort, jsonify, make_response, redirect, render_template, request, send_file, send_from_directory, session, url_for
 from flask_login import (
     LoginManager,
     UserMixin,
@@ -52,6 +52,7 @@ from database.db import (
     get_active_employees,
     get_all_daily_sales,
     get_all_employees,
+    get_daily_sales_by_month,
     get_all_fixed_expenses,
     get_electricity_bills,
     get_electricity_monthly_estimate,
@@ -165,70 +166,90 @@ HEBREW_MONTHS = {
 
 
 def _parse_month_param() -> date:
-    """Parse ?month=YYYY-MM query param, return first day of that month (or today's month)."""
+    """Parse selected month from URL param, session, or default to current month.
+
+    Priority:
+        1. ?month=YYYY-MM in URL → use it AND save to session
+        2. session['selected_month'] → use it
+        3. default → current month
+    """
     raw = request.args.get("month", "")
     if raw and re.match(r'^\d{4}-\d{2}$', raw):
         try:
             y, m = int(raw[:4]), int(raw[5:7])
             if 1 <= m <= 12:
+                session["selected_month"] = raw
                 return date(y, m, 1)
         except ValueError:
             pass
+
+    # Fall back to session
+    saved = session.get("selected_month", "")
+    if saved and re.match(r'^\d{4}-\d{2}$', saved):
+        try:
+            y, m = int(saved[:4]), int(saved[5:7])
+            if 1 <= m <= 12:
+                return date(y, m, 1)
+        except ValueError:
+            pass
+
     today = date.today()
     return date(today.year, today.month, 1)
 
 
-@app.route("/")
-@login_required
-def index():
+def _month_context() -> dict:
+    """Return template context dict with month switcher variables."""
     selected = _parse_month_param()
     today_first = date(date.today().year, date.today().month, 1)
 
     selected_month = selected.strftime("%Y-%m")
     prev_month = (selected - relativedelta(months=1)).strftime("%Y-%m")
-    # next_month only if it wouldn't go into the future
     next_first = selected + relativedelta(months=1)
     next_month = next_first.strftime("%Y-%m") if next_first <= today_first else None
-
     month_display = f"{HEBREW_MONTHS[selected.month]} {selected.year}"
 
-    return render_template(
-        "index.html",
-        selected_month=selected_month,
-        prev_month=prev_month,
-        next_month=next_month,
-        month_display=month_display,
-    )
+    return {
+        "selected_month": selected_month,
+        "prev_month": prev_month,
+        "next_month": next_month,
+        "month_display": month_display,
+    }
+
+
+@app.route("/")
+@login_required
+def index():
+    return render_template("index.html", **_month_context())
 
 
 @app.route("/fixed-expenses")
 @login_required
 def fixed_expenses():
-    return render_template("fixed_expenses.html")
+    return render_template("fixed_expenses.html", **_month_context())
 
 
 @app.route("/employees")
 @login_required
 def employees():
-    return render_template("employees.html")
+    return render_template("employees.html", **_month_context())
 
 
 @app.route("/goods")
 @login_required
 def goods():
-    return render_template("goods.html")
+    return render_template("goods.html", **_month_context())
 
 
 @app.route("/sales")
 @login_required
 def sales():
-    return render_template("sales.html")
+    return render_template("sales.html", **_month_context())
 
 
 @app.route("/electricity-history")
 @login_required
 def electricity_history():
-    return render_template("electricity_history.html")
+    return render_template("electricity_history.html", **_month_context())
 
 
 # ---------------------------------------------------------------------------
@@ -293,9 +314,13 @@ def api_fixed_expenses_delete(expense_id: int):
 @app.route("/api/employees", methods=["GET"])
 @login_required
 def api_employees_list():
-    today = date.today()
+    selected = _parse_month_param()
+    month_num = selected.month
+    year_num = selected.year
+    month_str = selected.strftime("%Y-%m")
+
     employees  = get_all_employees()
-    hours_rows = get_employee_hours(today.month, today.year)
+    hours_rows = get_employee_hours(month_num, year_num)
     hours_by_emp = {r["employee_id"]: r for r in hours_rows}
 
     result = []
@@ -313,7 +338,6 @@ def api_employees_list():
         })
 
     # Include unmatched employees from employee_monthly_hours (total_salary=0)
-    month_str = today.strftime("%Y-%m")
     from database.db import get_connection
     with get_connection() as conn:
         unmatched_rows = conn.execute(
@@ -369,11 +393,11 @@ def api_employees_update(employee_id: int):
         update_employee_rate(employee_id, float(hourly_rate))
 
     if hours_worked is not None:
-        today = date.today()
+        selected = _parse_month_param()
         upsert_employee_hours(
             employee_id=employee_id,
-            month=today.month,
-            year=today.year,
+            month=selected.month,
+            year=selected.year,
             hours_worked=float(hours_worked),
             is_finalized=True,
         )
@@ -515,8 +539,9 @@ def api_electricity_pdf(filename):
 @app.route("/api/sales")
 @login_required
 def api_sales_list():
-    """Return all daily_sales records (newest first)."""
-    rows = get_all_daily_sales()
+    """Return daily_sales records for the selected month (newest first)."""
+    selected = _parse_month_param()
+    rows = get_daily_sales_by_month(selected.month, selected.year)
     return jsonify([dict(r) for r in rows])
 
 

@@ -146,6 +146,16 @@ def get_all_daily_sales() -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def get_daily_sales_by_month(month: int, year: int) -> list[sqlite3.Row]:
+    """Return daily_sales for a specific month, ordered by date descending."""
+    prefix = f"{year}-{month:02d}"
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT * FROM daily_sales WHERE date LIKE ? ORDER BY date DESC",
+            (prefix + "%",),
+        ).fetchall()
+
+
 def get_total_income(month: int, year: int) -> float:
     with get_connection() as conn:
         row = conn.execute(

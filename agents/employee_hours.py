@@ -26,6 +26,7 @@ Credentials (.env):
 """
 
 import email
+import email.header
 import imaplib
 import os
 import re
@@ -112,15 +113,38 @@ class EmployeeHoursAgent(BaseAgent):
         return mail
 
     def _search_unread_emails(self, mail: imaplib.IMAP4_SSL) -> list[bytes]:
-        """Search for UNREAD attendance emails."""
-        criteria = (
-            f'(UNSEEN FROM "{self._sender_email}"'
-            f' SUBJECT "נוכחות באקסל")'
-        )
+        """Search for UNREAD attendance emails from Aviv sender.
+
+        Note: IMAP SUBJECT search with Hebrew causes ASCII encoding errors,
+        so we search by FROM+UNSEEN only and filter by subject client-side.
+        """
+        criteria = f'(UNSEEN FROM "{self._sender_email}")'
         status, data = mail.search(None, criteria)
         if status != "OK" or not data or not data[0]:
             return []
-        return data[0].split()
+
+        # Filter by subject containing "נוכחות באקסל" client-side
+        all_ids = data[0].split()
+        matching = []
+        for msg_id in all_ids:
+            status2, header_data = mail.fetch(msg_id, "(BODY[HEADER.FIELDS (SUBJECT)])")
+            if status2 != "OK":
+                continue
+            raw_header = header_data[0][1]
+            # Decode the subject header
+            subject_raw = email.header.decode_header(
+                email.message_from_bytes(raw_header).get("Subject", "")
+            )
+            subject = ""
+            for part, charset in subject_raw:
+                if isinstance(part, bytes):
+                    subject += part.decode(charset or "utf-8", errors="replace")
+                else:
+                    subject += part
+            if "נוכחות באקסל" in subject:
+                matching.append(msg_id)
+
+        return matching
 
     def _fetch_csv_attachment(self, mail: imaplib.IMAP4_SSL, msg_id: bytes) -> bytes | None:
         """Fetch the CSV attachment whose filename starts with the expected prefix."""

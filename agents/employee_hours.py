@@ -145,6 +145,18 @@ class EmployeeHoursAgent(BaseAgent):
 
         return matching
 
+    @staticmethod
+    def _decode_filename(raw_filename: str) -> str:
+        """Decode RFC 2047 encoded filename (e.g. =?UTF-8?B?...?=)."""
+        parts = email.header.decode_header(raw_filename)
+        decoded = ""
+        for part, charset in parts:
+            if isinstance(part, bytes):
+                decoded += part.decode(charset or "utf-8", errors="replace")
+            else:
+                decoded += part
+        return decoded
+
     def _fetch_csv_attachment(self, mail: imaplib.IMAP4_SSL, msg_id: bytes) -> bytes | None:
         """Fetch the CSV attachment whose filename starts with the expected prefix."""
         status, msg_data = mail.fetch(msg_id, "(RFC822)")
@@ -155,7 +167,8 @@ class EmployeeHoursAgent(BaseAgent):
 
         for part in msg.walk():
             ct = part.get_content_type()
-            filename = part.get_filename() or ""
+            raw_filename = part.get_filename() or ""
+            filename = self._decode_filename(raw_filename)
 
             is_csv = (
                 ct in ("text/csv", "application/vnd.ms-excel",

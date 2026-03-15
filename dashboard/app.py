@@ -347,7 +347,30 @@ def api_employees_list():
     year_num = selected.year
     month_str = selected.strftime("%Y-%m")
 
-    employees  = get_all_employees()
+    from database.db import get_connection
+
+    # Auto-rematch: scan unmatched rows against active employees before returning
+    active_emps = get_active_employees()
+    if active_emps:
+        with get_connection() as conn:
+            unmatched_rows = conn.execute(
+                "SELECT id, employee_name, total_hours FROM employee_monthly_hours "
+                "WHERE total_salary = 0"
+            ).fetchall()
+        for row in unmatched_rows:
+            csv_name = row["employee_name"].strip().lower()
+            for emp in active_emps:
+                db_name = emp["name"].strip().lower()
+                if db_name in csv_name or csv_name in db_name:
+                    salary = row["total_hours"] * emp["hourly_rate"]
+                    with get_connection() as conn:
+                        conn.execute(
+                            "UPDATE employee_monthly_hours SET total_salary = ?, employee_name = ? WHERE id = ?",
+                            (salary, emp["name"], row["id"]),
+                        )
+                    break
+
+    employees = get_all_employees()
     hours_rows = get_employee_hours(month_num, year_num)
     hours_by_emp = {r["employee_id"]: r for r in hours_rows}
 
@@ -366,16 +389,25 @@ def api_employees_list():
         })
 
     # Include unmatched employees from employee_monthly_hours (total_salary=0)
-    from database.db import get_connection
     with get_connection() as conn:
-        unmatched_rows = conn.execute(
+        unmatched_fresh = conn.execute(
             "SELECT employee_name, total_hours FROM employee_monthly_hours "
             "WHERE month = ? AND total_salary = 0",
             (month_str,),
         ).fetchall()
-    unmatched = [{"name": r[0], "hours": r[1]} for r in unmatched_rows]
+    unmatched = [{"name": r[0], "hours": r[1]} for r in unmatched_fresh]
 
-    return jsonify({"employees": result, "unmatched": unmatched})
+    # Also include matched rows for this month (salary > 0) so frontend
+    # can show hours data even when employees table is empty
+    with get_connection() as conn:
+        matched_hours = conn.execute(
+            "SELECT employee_name, total_hours, total_salary FROM employee_monthly_hours "
+            "WHERE month = ? AND total_salary > 0",
+            (month_str,),
+        ).fetchall()
+    monthly_hours = [{"name": r[0], "hours": r[1], "salary": r[2]} for r in matched_hours]
+
+    return jsonify({"employees": result, "unmatched": unmatched, "monthly_hours": monthly_hours})
 
 
 @app.route("/api/employees", methods=["POST"])
@@ -397,7 +429,10 @@ def api_employees_create():
 @app.route("/api/employees/<int:employee_id>", methods=["DELETE"])
 @login_required
 def api_employees_delete(employee_id: int):
-    delete_employee(employee_id)
+    # Soft-delete: set active=0 so employee_monthly_hours data stays intact
+    from database.db import get_connection
+    with get_connection() as conn:
+        conn.execute("UPDATE employees SET is_active = 0 WHERE id = ?", (employee_id,))
     return jsonify({"ok": True})
 
 

@@ -433,6 +433,7 @@ const monthLabel = {{ month_display | tojson }};
 document.getElementById('month-label').textContent = monthLabel;
 
 let allEmployees = [];
+let allMonthlyHours = [];
 
 // ── Load ───────────────────────────────────────────────────────
 async function loadEmployees() {
@@ -444,9 +445,10 @@ async function loadEmployees() {
         const data = await res.json();
         allEmployees = data.employees || data;
         const unmatched = data.unmatched || [];
-        renderKpis(kpi, allEmployees);
+        allMonthlyHours = data.monthly_hours || [];
+        renderKpis(kpi, allEmployees, allMonthlyHours);
         renderUnmatched(unmatched);
-        renderCards(cardsEl, allEmployees);
+        renderCards(cardsEl, allEmployees, allMonthlyHours, unmatched);
     } catch (err) {
         console.error(err);
         kpi.innerHTML     = '<p class="error-msg">שגיאה בטעינת נתונים.</p>';
@@ -480,11 +482,17 @@ function prefillAddEmployee(name) {
     document.getElementById('new-rate').focus();
 }
 
-function renderKpis(section, employees) {
+function renderKpis(section, employees, monthlyHours) {
     const active       = employees.filter(e => e.is_active);
-    const totalSalary  = active.reduce((s, e) =>
+    // Sum salary from employee cards (active employees with hours)
+    let totalSalary  = active.reduce((s, e) =>
         s + (e.hours_worked != null ? e.hours_worked * e.hourly_rate : 0), 0);
+    // Also add salary from monthly_hours (matched rows from CSV)
+    const monthlyTotal = (monthlyHours || []).reduce((s, m) => s + m.salary, 0);
+    // Use the higher of the two (they may overlap, so take max)
+    totalSalary = Math.max(totalSalary, monthlyTotal);
     const finalized    = active.filter(e => e.is_finalized).length;
+    const totalWorkers = active.length || (monthlyHours || []).length;
 
     section.innerHTML = `
         <div class="kpi-card kpi-card--salary">
@@ -493,7 +501,7 @@ function renderKpis(section, employees) {
                 <span class="kpi-label">עלות שכר חודשית</span>
             </div>
             <span class="kpi-value salary">${formatMoney(totalSalary)}</span>
-            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">${active.length} עובדים פעילים</span>
+            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">${totalWorkers} עובדים פעילים</span>
         </div>
         <div class="kpi-card kpi-card--salary">
             <div class="kpi-header">
@@ -504,9 +512,14 @@ function renderKpis(section, employees) {
         </div>`;
 }
 
-function renderCards(container, employees) {
-    if (!employees.length) {
+function renderCards(container, employees, monthlyHours, unmatched) {
+    if (!employees.length && !(monthlyHours && monthlyHours.length) && !(unmatched && unmatched.length)) {
         container.innerHTML = '<p style="color:var(--text-muted);padding:2rem;text-align:center">אין עובדים. לחץ "+ הוסף עובד" כדי להוסיף.</p>';
+        return;
+    }
+    if (!employees.length) {
+        // No employee cards to show, but there is monthly_hours / unmatched data
+        container.innerHTML = '';
         return;
     }
     container.innerHTML = employees.map(e => {
@@ -602,14 +615,13 @@ async function saveNewEmployee() {
 // ── Delete ────────────────────────────────────────────────────
 async function deleteEmployee(id) {
     const emp = allEmployees.find(e => e.id === id);
-    if (!confirm(`למחוק את "${emp.name}" לצמיתות?`)) return;
+    if (!confirm(`להשבית את "${emp.name}"? (ניתן להפעיל מחדש)`)) return;
 
     try {
         const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        allEmployees = allEmployees.filter(e => e.id !== id);
-        renderCards(document.getElementById('employee-cards'), allEmployees);
-        renderKpis(document.getElementById('kpi-section'), allEmployees);
+        // Reload to reflect soft-delete state
+        window.location.reload();
     } catch (err) {
         console.error(err);
         alert('שגיאה במחיקה.');

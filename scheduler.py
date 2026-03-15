@@ -290,8 +290,8 @@ def saturday_reconciliation():
 
     send_alert(msg, force=True)
     logger.info(
-        "=== Saturday reconciliation complete — %d inserted, %d deleted ===",
-        inserted_count, deleted_count,
+        "=== Saturday reconciliation complete — %d inserted (was %d) ===",
+        inserted_count, old_count,
     )
 
 

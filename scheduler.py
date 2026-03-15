@@ -19,7 +19,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from agents.bilboy import BilBoyAgent
 from agents.aviv_alerts import AvivAlertsAgent, check_missing_z_reports
 from agents.employee_hours import EmployeeHoursAgent
-from database.db import init_db, get_connection, get_total_income, get_total_expenses_by_category, insert_expense
+from database.db import init_db, get_connection, get_total_income, get_total_expenses_by_category
 from notifications.whatsapp import send_alert
 
 logging.basicConfig(
@@ -209,9 +209,12 @@ def saturday_reconciliation():
     """
     Full-month BilBoy reconciliation — runs every Saturday.
 
-    Fetches ALL invoices from BilBoy API for the current month and compares
-    against DB.  Inserts missing invoices and deletes DB rows that no longer
+    Fetches ALL documents from BilBoy API for the current month and compares
+    against DB.  Inserts missing docs and deletes DB rows that no longer
     exist in the API (BilBoy is the source of truth).
+
+    Key is (date, ref_number) for rows that have ref_number,
+    falling back to (date, amount, description) for legacy rows.
     """
     today = date.today()
     from_date = date(today.year, today.month, 1).isoformat()
@@ -221,7 +224,7 @@ def saturday_reconciliation():
     try:
         agent = BilBoyAgent()
         api_records = agent._fetch_invoices(from_date=from_date, to_date=to_date)
-        logger.info("[reconciliation] API returned %d invoices", len(api_records))
+        logger.info("[reconciliation] API returned %d documents", len(api_records))
     except Exception as exc:
         logger.error("[reconciliation] Failed to fetch from API: %s", exc)
         send_alert(
@@ -230,56 +233,81 @@ def saturday_reconciliation():
         )
         return
 
-    # Build set of API keys: (date, amount, description)
-    api_set = set()
-    api_by_key: dict[tuple, dict] = {}
+    # Build API lookup by ref_number (primary) and legacy key (fallback)
+    api_by_ref: dict[tuple, dict] = {}
+    api_by_legacy: dict[tuple, dict] = {}
     for r in api_records:
-        key = (r["date"], r["amount"], r["description"])
-        api_set.add(key)
-        api_by_key[key] = r
+        ref = r.get("ref_number") or ""
+        if ref:
+            api_by_ref[(r["date"], ref)] = r
+        api_by_legacy[(r["date"], r["amount"], r["description"])] = r
 
-    # Build set of DB keys
+    # Build DB lookup
     with get_connection() as conn:
         db_rows = conn.execute(
-            "SELECT id, date, amount, description FROM expenses "
+            "SELECT id, date, amount, description, ref_number FROM expenses "
             "WHERE category='goods' AND source='bilboy' "
             "AND date >= ? AND date <= ?",
             (from_date, to_date),
         ).fetchall()
 
-    db_set = set()
-    db_by_key: dict[tuple, list[int]] = {}
-    for row in db_rows:
-        key = (row[1], float(row[2]), row[3])
-        db_set.add(key)
-        db_by_key.setdefault(key, []).append(row[0])
+    db_by_ref: dict[tuple, list[int]] = {}
+    db_by_legacy: dict[tuple, list[int]] = {}
+    db_matched_ids = set()
 
-    # --- Insert: in API but not in DB ---
-    to_insert = api_set - db_set
+    for row in db_rows:
+        row_id = row[0]
+        ref = row[4] or ""
+        if ref:
+            key = (row[1], ref)
+            db_by_ref.setdefault(key, []).append(row_id)
+        legacy_key = (row[1], float(row[2]), row[3])
+        db_by_legacy.setdefault(legacy_key, []).append(row_id)
+
+    # --- Match: find DB rows that exist in API ---
+    for key in db_by_ref:
+        if key in api_by_ref:
+            for rid in db_by_ref[key]:
+                db_matched_ids.add(rid)
+
+    for key in db_by_legacy:
+        if key in api_by_legacy:
+            for rid in db_by_legacy[key]:
+                db_matched_ids.add(rid)
+
+    # --- Find API records not in DB ---
     inserted_count = 0
     inserted_amount = 0.0
-    for key in sorted(to_insert):
-        r = api_by_key[key]
-        insert_expense(
-            date=r["date"], category="goods",
-            amount=r["amount"], description=r["description"],
-            source="bilboy",
-        )
+    for r in api_records:
+        ref = r.get("ref_number") or ""
+        # Check if already in DB by ref_number
+        if ref and (r["date"], ref) in db_by_ref:
+            continue
+        # Check by legacy key
+        legacy_key = (r["date"], r["amount"], r["description"])
+        if legacy_key in db_by_legacy:
+            continue
+        # Not in DB — insert
+        agent._insert_bilboy_expense(r)
         inserted_count += 1
         inserted_amount += r["amount"]
-        logger.info("[reconciliation] Inserted: %s | %s | %.2f", r["date"], r["description"], r["amount"])
+        logger.info("[reconciliation] Inserted: %s | %s | %s | %.2f",
+                     r["date"], r.get("doc_type_name", ""), r["description"], r["amount"])
 
-    # --- Delete: in DB but not in API ---
-    to_delete = db_set - api_set
+    # --- Delete: DB rows not matched to any API record ---
+    all_db_ids = {row[0] for row in db_rows}
+    orphan_ids = all_db_ids - db_matched_ids
     deleted_count = 0
     deleted_amount = 0.0
-    with get_connection() as conn:
-        for key in sorted(to_delete):
-            for row_id in db_by_key[key]:
-                conn.execute("DELETE FROM expenses WHERE id = ?", (row_id,))
-                deleted_count += 1
-                deleted_amount += key[1]
-                logger.info("[reconciliation] Deleted id=%d: %s | %s | %.2f", row_id, key[0], key[2], key[1])
+    if orphan_ids:
+        with get_connection() as conn:
+            for row in db_rows:
+                if row[0] in orphan_ids:
+                    conn.execute("DELETE FROM expenses WHERE id = ?", (row[0],))
+                    deleted_count += 1
+                    deleted_amount += float(row[2])
+                    logger.info("[reconciliation] Deleted id=%d: %s | %s | %.2f",
+                                 row[0], row[1], row[3], float(row[2]))
 
     # Final month total
     goods_total = get_total_expenses_by_category(today.month, today.year).get("goods", 0)
@@ -302,12 +330,12 @@ def saturday_reconciliation():
         ]
         if inserted_count:
             lines.append(
-                f"\u2705 \u05e0\u05d5\u05e1\u05e4\u05d5: {inserted_count} \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea"
+                f"\u2705 \u05e0\u05d5\u05e1\u05e4\u05d5: {inserted_count} \u05de\u05e1\u05de\u05db\u05d9\u05dd"
                 f" | \u20aa{inserted_amount:,.2f}"
             )
         if deleted_count:
             lines.append(
-                f"\U0001f5d1\ufe0f \u05e0\u05de\u05d7\u05e7\u05d5: {deleted_count} \u05d7\u05e9\u05d1\u05d5\u05e0\u05d9\u05d5\u05ea"
+                f"\U0001f5d1\ufe0f \u05e0\u05de\u05d7\u05e7\u05d5: {deleted_count} \u05de\u05e1\u05de\u05db\u05d9\u05dd"
                 f" | \u20aa{deleted_amount:,.2f}"
             )
         lines.append(

@@ -132,13 +132,19 @@ def create_tables(conn):
 
 
 def _migrate_expenses_columns(conn):
-    """Add electricity-specific columns to expenses if they don't exist yet."""
+    """Add extra columns to expenses if they don't exist yet."""
     new_cols = [
+        # electricity columns
         ("is_correction", "BOOLEAN DEFAULT 0"),
         ("pdf_filename",  "TEXT"),
         ("period_start",  "TEXT"),
         ("period_end",    "TEXT"),
         ("billing_days",  "INTEGER"),
+        # bilboy columns
+        ("ref_number",        "TEXT"),
+        ("total_without_vat", "REAL"),
+        ("doc_type",          "INTEGER"),
+        ("doc_type_name",     "TEXT"),
     ]
     for col, definition in new_cols:
         try:

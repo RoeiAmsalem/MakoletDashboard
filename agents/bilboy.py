@@ -1,11 +1,18 @@
 """
-BilBoy agent - fetches goods invoices from the BilBoy API and saves them
+BilBoy agent - fetches ALL document types from the BilBoy API and saves them
 to the expenses table with category='goods'.
+
+Document types:
+    2 = תעודת משלוח (delivery note)
+    3 = חשבונית (invoice)
+    4 = חשבונית זיכוי (credit invoice)
+    5 = תעודת החזרה (return note) — negative amount
+    7 = קבלה (receipt)
 
 API flow:
     GET /user/branches          → pick first branch
     GET /customer/suppliers     → list of supplier IDs
-    GET /customer/docs/headers  → invoice list (filtered to today's date range)
+    GET /customer/docs/headers  → document list (filtered to date range)
 
 Auth: Bearer token from BILBOY_TOKEN in .env
       Token is obtained manually via OTP and renewed when expired (401).
@@ -18,11 +25,19 @@ import requests
 from dotenv import load_dotenv
 
 from agents.base_agent import BaseAgent
-from database.db import get_connection, insert_expense, add_pending_fetch, resolve_pending_fetch
+from database.db import get_connection, add_pending_fetch, resolve_pending_fetch
 
 load_dotenv()
 
 API_BASE = "https://app.billboy.co.il:5050/api"
+
+DOC_TYPE_NAMES = {
+    2: "תעודת משלוח",
+    3: "חשבונית",
+    4: "חשבונית זיכוי",
+    5: "תעודת החזרה",
+    7: "קבלה",
+}
 
 
 class BilBoyAgent(BaseAgent):
@@ -82,12 +97,12 @@ class BilBoyAgent(BaseAgent):
                 keep_ids.append(sid)
         return ",".join(keep_ids), skip_names
 
-    def _get_invoice_headers(self, branch_id: str, suppliers_csv: str,
-                             from_date: str | None = None,
-                             to_date: str | None = None) -> list[dict]:
+    def _get_doc_headers(self, branch_id: str, suppliers_csv: str,
+                         from_date: str | None = None,
+                         to_date: str | None = None) -> list[dict]:
         """
         Fetch document headers for a date range (default: yesterday only).
-        Returns a flat list of invoice dicts.
+        Returns ALL document types — no type filtering.
         """
         if from_date is None or to_date is None:
             yesterday = date.today() - timedelta(days=1)
@@ -111,7 +126,8 @@ class BilBoyAgent(BaseAgent):
 
     def _fetch_invoices(self, from_date: str = None, to_date: str = None) -> list[dict]:
         """
-        Core invoice fetching logic. Used by both fetch_data() and fetch_data_for_date().
+        Core fetching logic. Used by both fetch_data() and fetch_data_for_date().
+        Fetches ALL document types (invoices, delivery notes, returns, etc.).
         """
         branch_id = self._get_branch_id()
         self.logger.info("[bilboy] Using branch_id=%s", branch_id)
@@ -123,62 +139,63 @@ class BilBoyAgent(BaseAgent):
             self.logger.warning("[bilboy] No supplier IDs found")
             return []
 
-        invoices = self._get_invoice_headers(branch_id, suppliers_csv,
-                                              from_date=from_date, to_date=to_date)
-        self.logger.info("[bilboy] Fetched %d invoice headers", len(invoices))
+        docs = self._get_doc_headers(branch_id, suppliers_csv,
+                                     from_date=from_date, to_date=to_date)
+        self.logger.info("[bilboy] Fetched %d documents", len(docs))
 
         records = []
-        for inv in invoices:
-            raw_date = inv.get("date") or inv.get("documentDate") or date.today().isoformat()
-            amount = float(inv.get("totalWithVat") or inv.get("totalAmount") or inv.get("amount") or 0)
-            supplier = inv.get("supplierName") or ""
-            ref_number = str(inv.get("refNumber") or inv.get("number") or "")
-            description = supplier or ref_number or "BilBoy invoice"
+        for doc in docs:
+            raw_date = doc.get("date") or doc.get("documentDate") or date.today().isoformat()
+            amount = float(doc.get("totalWithVat") or doc.get("totalAmount") or doc.get("amount") or 0)
+            total_without_vat = float(doc.get("totalWithoutVat") or 0)
+            supplier = doc.get("supplierName") or ""
+            ref_number = str(doc.get("refNumber") or doc.get("number") or "")
+            doc_type = doc.get("type")
+            doc_type_name = DOC_TYPE_NAMES.get(doc_type, str(doc_type))
+            description = supplier or ref_number or "BilBoy document"
             records.append(
                 {
                     "date": str(raw_date)[:10],  # ensure YYYY-MM-DD
                     "amount": amount,
+                    "total_without_vat": total_without_vat,
                     "description": description,
-                    "raw": inv,
+                    "ref_number": ref_number,
+                    "doc_type": doc_type,
+                    "doc_type_name": doc_type_name,
+                    "raw": doc,
                 }
             )
         return records
 
     def fetch_data(self) -> list[dict]:
         """
-        Fetch invoices for the last 7 days in a single API call.
-        Duplicate detection in save_to_db() ensures only new invoices are
-        inserted, so late-arriving invoices on days we already have data for
+        Fetch documents for the last 7 days in a single API call.
+        Duplicate detection in save_to_db() ensures only new documents are
+        inserted, so late-arriving docs on days we already have data for
         are caught automatically.
         """
         today = date.today()
         from_date = (today - timedelta(days=7)).isoformat()
         to_date = (today - timedelta(days=1)).isoformat()
         records = self._fetch_invoices(from_date=from_date, to_date=to_date)
-        self.logger.info("[bilboy] Fetched %d invoices for %s to %s",
+        self.logger.info("[bilboy] Fetched %d documents for %s to %s",
                          len(records), from_date, to_date)
         return records
 
     def fetch_data_for_date(self, target_date: str) -> list[dict]:
         """
-        Fetch invoices for a specific date (used for pending retries).
+        Fetch documents for a specific date (used for pending retries).
         """
         return self._fetch_invoices(from_date=target_date, to_date=target_date)
 
     def save_to_db(self, data: list[dict]) -> None:
-        """Insert each invoice as an expense with category='goods', skipping duplicates."""
+        """Insert each document as an expense with category='goods', skipping duplicates."""
         saved = 0
         saved_dates = set()
         for record in data:
             if self._is_duplicate(record):
                 continue
-            insert_expense(
-                date=record["date"],
-                category="goods",
-                amount=record["amount"],
-                description=record["description"],
-                source="bilboy",
-            )
+            self._insert_bilboy_expense(record)
             saved += 1
             saved_dates.add(record["date"])
         # Resolve any pending fetches for dates we successfully saved
@@ -189,12 +206,46 @@ class BilBoyAgent(BaseAgent):
 
     @staticmethod
     def _is_duplicate(record: dict) -> bool:
+        """Check by ref_number first (reliable), fall back to old key."""
         with get_connection() as conn:
+            if record.get("ref_number"):
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM expenses "
+                    "WHERE source='bilboy' AND ref_number=? AND date=?",
+                    (record["ref_number"], record["date"]),
+                ).fetchone()[0]
+                if count > 0:
+                    return True
+            # Fallback for rows without ref_number
             count = conn.execute(
-                "SELECT COUNT(*) FROM expenses WHERE date=? AND source='bilboy' AND amount=? AND description=?",
+                "SELECT COUNT(*) FROM expenses "
+                "WHERE date=? AND source='bilboy' AND amount=? AND description=?",
                 (record["date"], record["amount"], record["description"]),
             ).fetchone()[0]
         return count > 0
+
+    @staticmethod
+    def _insert_bilboy_expense(record: dict) -> int:
+        """Insert a bilboy expense with all document fields."""
+        with get_connection() as conn:
+            cur = conn.execute(
+                """INSERT INTO expenses
+                   (date, category, amount, description, source,
+                    ref_number, total_without_vat, doc_type, doc_type_name)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record["date"],
+                    "goods",
+                    record["amount"],
+                    record["description"],
+                    "bilboy",
+                    record.get("ref_number"),
+                    record.get("total_without_vat"),
+                    record.get("doc_type"),
+                    record.get("doc_type_name"),
+                ),
+            )
+            return cur.lastrowid
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +258,6 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     result = BilBoyAgent().run()
     if result["success"]:
-        print(f"Success: {len(result['data'])} invoices saved.")
+        print(f"Success: {len(result['data'])} documents saved.")
     else:
         print(f"Failed: {result['error']}")

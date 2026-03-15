@@ -413,7 +413,6 @@ def goods():
     invoices_total = sum(r['amount'] or 0 for r in rows_with_vat if r['doc_type'] == 3)
     delivery_total = sum(r['amount'] or 0 for r in rows_with_vat if r['doc_type'] == 2)
     returns_total = sum(r['amount'] or 0 for r in rows_with_vat if r['doc_type'] == 5)
-    total_vat = sum(r['vat_amount'] for r in rows_with_vat)
     total_before_vat = sum(r['before_vat'] for r in rows_with_vat)
     count = len(rows_with_vat)
 
@@ -423,7 +422,6 @@ def goods():
         invoices_total=invoices_total,
         delivery_total=delivery_total,
         returns_total=returns_total,
-        total_vat=total_vat,
         total_before_vat=total_before_vat,
         count=count,
         **ctx,

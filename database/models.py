@@ -145,6 +145,7 @@ def _migrate_expenses_columns(conn):
         ("total_without_vat", "REAL"),
         ("doc_type",          "INTEGER"),
         ("doc_type_name",     "TEXT"),
+        ("paid",              "INTEGER DEFAULT 0"),
     ]
     for col, definition in new_cols:
         try:

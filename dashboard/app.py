@@ -370,44 +370,65 @@ def api_employees_list():
                         )
                     break
 
+    # Fetch all monthly_hours rows for this month
+    with get_connection() as conn:
+        all_monthly = conn.execute(
+            "SELECT employee_name, total_hours, total_salary FROM employee_monthly_hours "
+            "WHERE month = ?",
+            (month_str,),
+        ).fetchall()
+    monthly_hours = [{"name": r[0], "hours": r[1], "salary": r[2]} for r in all_monthly]
+    total_csv_count = len(monthly_hours)
+
     employees = get_all_employees()
     hours_rows = get_employee_hours(month_num, year_num)
     hours_by_emp = {r["employee_id"]: r for r in hours_rows}
 
+    # Build a lookup from monthly_hours by name for merging
+    matched_monthly_names = set()
+
     result = []
     for emp in employees:
         h = hours_by_emp.get(emp["id"])
+        emp_name_lower = emp["name"].strip().lower()
+
+        # Try to find matching monthly_hours entry
+        mh_match = None
+        for mh in monthly_hours:
+            mh_name_lower = mh["name"].strip().lower()
+            if emp_name_lower in mh_name_lower or mh_name_lower in emp_name_lower:
+                mh_match = mh
+                matched_monthly_names.add(mh["name"])
+                break
+
         result.append({
             "id":           emp["id"],
             "name":         emp["name"],
             "hourly_rate":  emp["hourly_rate"],
             "shift":        emp["shift"] if "shift" in emp.keys() else "",
             "is_active":    bool(emp["is_active"]),
-            "hours_worked": h["hours_worked"] if h else None,
-            "is_finalized": bool(h["is_finalized"]) if h else False,
+            "hours_worked": mh_match["hours"] if mh_match else (h["hours_worked"] if h else None),
+            "salary":       mh_match["salary"] if mh_match else None,
+            "is_finalized": True if mh_match else (bool(h["is_finalized"]) if h else False),
             "hours_row_id": h["id"] if h else None,
         })
 
-    # Include unmatched employees from employee_monthly_hours (total_salary=0)
-    with get_connection() as conn:
-        unmatched_fresh = conn.execute(
-            "SELECT employee_name, total_hours FROM employee_monthly_hours "
-            "WHERE month = ? AND total_salary = 0",
-            (month_str,),
-        ).fetchall()
-    unmatched = [{"name": r[0], "hours": r[1]} for r in unmatched_fresh]
+    # Unmatched: monthly_hours rows with salary=0 and no active employee match
+    unmatched = [mh for mh in monthly_hours if mh["salary"] == 0 and mh["name"] not in matched_monthly_names]
 
-    # Also include matched rows for this month (salary > 0) so frontend
-    # can show hours data even when employees table is empty
-    with get_connection() as conn:
-        matched_hours = conn.execute(
-            "SELECT employee_name, total_hours, total_salary FROM employee_monthly_hours "
-            "WHERE month = ? AND total_salary > 0",
-            (month_str,),
-        ).fetchall()
-    monthly_hours = [{"name": r[0], "hours": r[1], "salary": r[2]} for r in matched_hours]
+    # Past employees: monthly_hours with salary > 0 but no matching employee card
+    past_employees = [mh for mh in monthly_hours if mh["salary"] > 0 and mh["name"] not in matched_monthly_names]
 
-    return jsonify({"employees": result, "unmatched": unmatched, "monthly_hours": monthly_hours})
+    matched_count = sum(1 for e in result if e["hours_worked"] is not None) + len(past_employees)
+
+    return jsonify({
+        "employees": result,
+        "unmatched": unmatched,
+        "monthly_hours": monthly_hours,
+        "past_employees": past_employees,
+        "matched_count": matched_count,
+        "total_csv_count": total_csv_count,
+    })
 
 
 @app.route("/api/employees", methods=["POST"])

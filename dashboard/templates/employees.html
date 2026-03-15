@@ -300,6 +300,41 @@
             margin-right: 0.4rem;
         }
 
+        /* Past employee cards (read-only, gray) */
+        .employee-card.past {
+            background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+            border-color: rgba(100,116,139,0.3);
+            opacity: 0.75;
+        }
+        .past-section-title {
+            font-size: 0.95rem;
+            font-weight: 700;
+            color: var(--text-secondary);
+            margin: 1.5rem 0 0.75rem;
+        }
+        .past-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.3rem 0;
+        }
+        .past-info-label {
+            font-size: 0.78rem;
+            color: rgba(241,245,249,0.5);
+        }
+        .past-info-value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-light);
+            direction: ltr;
+        }
+        .past-note {
+            font-size: 0.72rem;
+            color: rgba(148,163,184,0.7);
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+
         @media (max-width: 600px) {
             .employee-cards { grid-template-columns: 1fr; }
         }
@@ -420,6 +455,9 @@
         <div class="employee-cards" id="employee-cards">
             <div class="loading"><div class="spinner"></div><span>טוען עובדים...</span></div>
         </div>
+
+        <!-- Past employees (from monthly_hours, no active employee match) -->
+        <div id="past-employees-section"></div>
     </section>
 
 </main>
@@ -434,6 +472,7 @@ document.getElementById('month-label').textContent = monthLabel;
 
 let allEmployees = [];
 let allMonthlyHours = [];
+let apiData = {};
 
 // ── Load ───────────────────────────────────────────────────────
 async function loadEmployees() {
@@ -442,13 +481,15 @@ async function loadEmployees() {
     try {
         const res = await fetch(`/api/employees?month=${SELECTED_MONTH}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
-        allEmployees = data.employees || data;
-        const unmatched = data.unmatched || [];
-        allMonthlyHours = data.monthly_hours || [];
-        renderKpis(kpi, allEmployees, allMonthlyHours);
+        apiData = await res.json();
+        allEmployees = apiData.employees || [];
+        const unmatched = apiData.unmatched || [];
+        allMonthlyHours = apiData.monthly_hours || [];
+        const pastEmployees = apiData.past_employees || [];
+        renderKpis(kpi, apiData);
         renderUnmatched(unmatched);
-        renderCards(cardsEl, allEmployees, allMonthlyHours, unmatched);
+        renderCards(cardsEl, allEmployees, unmatched, pastEmployees);
+        renderPastEmployees(pastEmployees);
     } catch (err) {
         console.error(err);
         kpi.innerHTML     = '<p class="error-msg">שגיאה בטעינת נתונים.</p>';
@@ -482,17 +523,13 @@ function prefillAddEmployee(name) {
     document.getElementById('new-rate').focus();
 }
 
-function renderKpis(section, employees, monthlyHours) {
-    const active       = employees.filter(e => e.is_active);
-    // Sum salary from employee cards (active employees with hours)
-    let totalSalary  = active.reduce((s, e) =>
-        s + (e.hours_worked != null ? e.hours_worked * e.hourly_rate : 0), 0);
-    // Also add salary from monthly_hours (matched rows from CSV)
-    const monthlyTotal = (monthlyHours || []).reduce((s, m) => s + m.salary, 0);
-    // Use the higher of the two (they may overlap, so take max)
-    totalSalary = Math.max(totalSalary, monthlyTotal);
-    const finalized    = active.filter(e => e.is_finalized).length;
-    const totalWorkers = active.length || (monthlyHours || []).length;
+function renderKpis(section, data) {
+    const monthlyHours = data.monthly_hours || [];
+    const matchedCount = data.matched_count || 0;
+    const totalCsvCount = data.total_csv_count || 0;
+    // Total salary = sum of all monthly_hours entries with salary > 0
+    const totalSalary = monthlyHours.reduce((s, m) => s + m.salary, 0);
+    const activeCount = (data.employees || []).filter(e => e.is_active).length;
 
     section.innerHTML = `
         <div class="kpi-card kpi-card--salary">
@@ -501,33 +538,38 @@ function renderKpis(section, employees, monthlyHours) {
                 <span class="kpi-label">עלות שכר חודשית</span>
             </div>
             <span class="kpi-value salary">${formatMoney(totalSalary)}</span>
-            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">${totalWorkers} עובדים פעילים</span>
+            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">${activeCount} עובדים פעילים</span>
         </div>
         <div class="kpi-card kpi-card--salary">
             <div class="kpi-header">
                 <span class="kpi-icon">✅</span>
-                <span class="kpi-label">שעות סופיות</span>
+                <span class="kpi-label">עובדים מזוהים</span>
             </div>
-            <span class="kpi-value salary">${finalized} / ${active.length}</span>
+            <span class="kpi-value salary">${matchedCount} / ${totalCsvCount}</span>
+            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">זוהו מתוך הדוח החודשי</span>
         </div>`;
 }
 
-function renderCards(container, employees, monthlyHours, unmatched) {
-    if (!employees.length && !(monthlyHours && monthlyHours.length) && !(unmatched && unmatched.length)) {
+function renderCards(container, employees, unmatched, pastEmployees) {
+    if (!employees.length && !(unmatched && unmatched.length) && !(pastEmployees && pastEmployees.length)) {
         container.innerHTML = '<p style="color:var(--text-muted);padding:2rem;text-align:center">אין עובדים. לחץ "+ הוסף עובד" כדי להוסיף.</p>';
         return;
     }
     if (!employees.length) {
-        // No employee cards to show, but there is monthly_hours / unmatched data
         container.innerHTML = '';
         return;
     }
     container.innerHTML = employees.map(e => {
+        const hasMonthlySalary = e.salary != null && e.salary > 0;
         const badge = !e.is_active
             ? '<span class="inactive-badge">לא פעיל</span>'
             : e.is_finalized
                 ? '<span class="finalized-badge">סופי ✓</span>'
-                : '<span class="unfinalized-badge">טרם הוזן</span>';
+                : '<span class="unfinalized-badge">טרם הועלה</span>';
+
+        const hoursInfo = e.hours_worked != null
+            ? `<span style="font-size:0.85rem;color:#86efac;font-weight:600">${e.hours_worked.toFixed(1)} שעות → ${formatMoney(e.salary || e.hours_worked * e.hourly_rate)}</span>`
+            : '<span style="font-size:0.85rem;color:#fde68a">טרם הועלה דוח שעות</span>';
 
         const toggleLabel = e.is_active ? '⏸ השבת' : '▶ הפעל';
         const toggleClass = e.is_active ? 'deactivate' : 'activate';
@@ -544,9 +586,11 @@ function renderCards(container, employees, monthlyHours, unmatched) {
                     <button class="btn-card-action ${toggleClass}"
                         onclick="toggleActive(${e.id})" title="${toggleLabel}">${toggleLabel}</button>
                     <button class="btn-card-action del"
-                        onclick="deleteEmployee(${e.id})" title="מחק">🗑️</button>
+                        onclick="deleteEmployee(${e.id})" title="השבת">🗑️</button>
                 </div>
             </div>
+
+            ${hoursInfo}
 
             <div class="field-row">
                 <span class="field-label">תעריף לשעה (₪)</span>
@@ -576,6 +620,39 @@ function renderCards(container, employees, monthlyHours, unmatched) {
             <div class="save-msg" id="msg-${e.id}"></div>
         </div>`;
     }).join('');
+}
+
+function renderPastEmployees(pastEmployees) {
+    const el = document.getElementById('past-employees-section');
+    if (!pastEmployees || !pastEmployees.length) {
+        el.innerHTML = '';
+        return;
+    }
+    let html = '<div class="past-section-title">👤 עובדים לא פעילים עם שעות בחודש זה</div>';
+    html += '<div class="employee-cards">';
+    for (const p of pastEmployees) {
+        html += `
+        <div class="employee-card past">
+            <div class="employee-card-header">
+                <div class="emp-header-left">
+                    <div class="employee-avatar" style="background:rgba(100,116,139,0.3)">👤</div>
+                    <div class="employee-name">${p.name}</div>
+                </div>
+                <span class="inactive-badge">לא פעיל 👤</span>
+            </div>
+            <div class="past-info-row">
+                <span class="past-info-label">שעות</span>
+                <span class="past-info-value">${p.hours.toFixed(1)}</span>
+            </div>
+            <div class="past-info-row">
+                <span class="past-info-label">שכר</span>
+                <span class="past-info-value">${formatMoney(p.salary)}</span>
+            </div>
+            <div class="past-note">עובד זה אינו פעיל במערכת</div>
+        </div>`;
+    }
+    html += '</div>';
+    el.innerHTML = html;
 }
 
 // ── Add panel ─────────────────────────────────────────────────
@@ -635,10 +712,8 @@ async function toggleActive(id) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const { is_active } = await res.json();
 
-        const emp = allEmployees.find(e => e.id === id);
-        emp.is_active = is_active;
-        renderCards(document.getElementById('employee-cards'), allEmployees);
-        renderKpis(document.getElementById('kpi-section'), allEmployees);
+        // Reload to reflect toggle state properly
+        window.location.reload();
     } catch (err) {
         console.error(err);
         alert('שגיאה בשינוי סטטוס.');
@@ -690,7 +765,7 @@ async function saveEmployee(id) {
             badgeEl.innerHTML = '<span class="finalized-badge">סופי ✓</span>';
         }
 
-        renderKpis(document.getElementById('kpi-section'), allEmployees);
+        renderKpis(document.getElementById('kpi-section'), apiData);
         msgEl.textContent = 'נשמר בהצלחה ✓';
         setTimeout(() => { msgEl.textContent = ''; }, 3000);
     } catch (err) {

@@ -399,19 +399,32 @@ def goods():
     ''', (f'{selected_month}%',)).fetchall()
     conn.close()
 
-    rows = [dict(r) for r in rows]
-    total = sum(r['amount'] or 0 for r in rows)
-    invoices_total = sum(r['amount'] or 0 for r in rows if r['doc_type'] == 3)
-    delivery_total = sum(r['amount'] or 0 for r in rows if r['doc_type'] == 2)
-    returns_total = sum(r['amount'] or 0 for r in rows if r['doc_type'] == 5)
-    count = len(rows)
+    rows_with_vat = []
+    for row in rows:
+        r = dict(row)
+        if r.get('total_without_vat') and r['total_without_vat'] != 0:
+            r['before_vat'] = round(r['total_without_vat'], 2)
+        else:
+            r['before_vat'] = round((r['amount'] or 0) / 1.18, 2)
+        r['vat_amount'] = round((r['amount'] or 0) - r['before_vat'], 2)
+        rows_with_vat.append(r)
+
+    total = sum(r['amount'] or 0 for r in rows_with_vat)
+    invoices_total = sum(r['amount'] or 0 for r in rows_with_vat if r['doc_type'] == 3)
+    delivery_total = sum(r['amount'] or 0 for r in rows_with_vat if r['doc_type'] == 2)
+    returns_total = sum(r['amount'] or 0 for r in rows_with_vat if r['doc_type'] == 5)
+    total_vat = sum(r['vat_amount'] for r in rows_with_vat)
+    total_before_vat = sum(r['before_vat'] for r in rows_with_vat)
+    count = len(rows_with_vat)
 
     return render_template('goods.html',
-        rows=rows,
+        rows=rows_with_vat,
         total=total,
         invoices_total=invoices_total,
         delivery_total=delivery_total,
         returns_total=returns_total,
+        total_vat=total_vat,
+        total_before_vat=total_before_vat,
         count=count,
         **ctx,
     )

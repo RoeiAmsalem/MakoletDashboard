@@ -216,6 +216,7 @@
                 <button class="filter-btn" data-filter="2">תעודות משלוח</button>
                 <button class="filter-btn" data-filter="5">החזרות</button>
             </div>
+            <small style="color:#aaa;">מע"מ מחושב לפי 18%</small>
             <span id="docs-count" style="font-size:0.85rem;color:var(--text-secondary)">{{ count }} מסמכים</span>
         </div>
         <div style="overflow-x:auto">
@@ -227,6 +228,7 @@
                         <th>מס' מסמך</th>
                         <th>סוג מסמך</th>
                         <th class="hide-mobile">לפני מע"מ</th>
+                        <th class="hide-mobile">מע"מ (18%)</th>
                         <th>סה"כ כולל מע"מ</th>
                     </tr>
                 </thead>
@@ -248,12 +250,13 @@
                             <span class="badge badge-gray">{{ r.doc_type_name or 'אחר' }}</span>
                             {% endif %}
                         </td>
-                        <td class="hide-mobile amount-muted">₪{{ '{:,.2f}'.format(r.total_without_vat or 0) }}</td>
+                        <td class="hide-mobile amount-muted">₪{{ '{:,.2f}'.format(r.before_vat) }}</td>
+                        <td class="hide-mobile {{ 'amount-negative' if r.vat_amount < 0 else '' }}" style="{{ 'color:#fca5a5' if r.vat_amount < 0 else 'color:#fbbf24' }}">₪{{ '{:,.2f}'.format(r.vat_amount) }}</td>
                         <td class="{{ 'amount-negative' if (r.amount or 0) < 0 else 'amount-positive' }}">₪{{ '{:,.2f}'.format(r.amount or 0) }}</td>
                     </tr>
                     {% endfor %}
                     {% else %}
-                    <tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted)">אין נתוני סחורה עדיין.</td></tr>
+                    <tr><td colspan="7" style="text-align:center;padding:2rem;color:var(--text-muted)">אין נתוני סחורה עדיין.</td></tr>
                     {% endif %}
                 </tbody>
                 {% if rows %}
@@ -263,7 +266,8 @@
                         <td></td>
                         <td></td>
                         <td></td>
-                        <td class="hide-mobile"></td>
+                        <td class="hide-mobile">₪{{ '{:,.2f}'.format(total_before_vat) }}</td>
+                        <td class="hide-mobile" style="color:#fbbf24">₪{{ '{:,.2f}'.format(total_vat) }}</td>
                         <td>₪{{ '{:,.2f}'.format(total) }}</td>
                     </tr>
                 </tfoot>

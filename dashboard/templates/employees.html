@@ -335,6 +335,26 @@
             margin-top: 0.5rem;
         }
 
+        /* View mode info */
+        .emp-rate-info {
+            font-size: 0.8rem;
+            color: rgba(241,245,249,0.45);
+        }
+        .emp-hours-info {
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+        .emp-hours-info.matched { color: #86efac; }
+        .emp-hours-info.pending { color: #fde68a; }
+
+        /* Edit mode panel inside card */
+        .card-edit-panel { display: none; flex-direction: column; gap: 0.75rem; }
+        .card-edit-panel.open { display: flex; }
+        .card-view-panel { display: flex; flex-direction: column; gap: 0.5rem; }
+        .card-view-panel.hidden { display: none; }
+
+        .edit-actions { display: flex; gap: 0.5rem; }
+
         @media (max-width: 600px) {
             .employee-cards { grid-template-columns: 1fr; }
         }
@@ -559,67 +579,97 @@ function renderCards(container, employees, unmatched, pastEmployees) {
         container.innerHTML = '';
         return;
     }
+    const IS_ADMIN = {{ current_user.is_admin | tojson }};
     container.innerHTML = employees.map(e => {
-        const hasMonthlySalary = e.salary != null && e.salary > 0;
-        const badge = !e.is_active
-            ? '<span class="inactive-badge">לא פעיל</span>'
-            : e.is_finalized
-                ? '<span class="finalized-badge">סופי ✓</span>'
-                : '<span class="unfinalized-badge">טרם הועלה</span>';
+        const shiftBadge = e.shift ? `<span class="shift-badge">${e.shift}</span>` : '';
+        const shiftLabel = e.shift || 'גמיש';
 
         const hoursInfo = e.hours_worked != null
-            ? `<span style="font-size:0.85rem;color:#86efac;font-weight:600">${e.hours_worked.toFixed(1)} שעות → ${formatMoney(e.salary || e.hours_worked * e.hourly_rate)}</span>`
-            : '<span style="font-size:0.85rem;color:#fde68a">טרם הועלה דוח שעות</span>';
+            ? `<span class="emp-hours-info matched">${e.hours_worked.toFixed(1)} שעות → ${formatMoney(e.salary || e.hours_worked * e.hourly_rate)}</span>`
+            : '<span class="emp-hours-info pending">טרם הועלה דוח שעות</span>';
 
-        const toggleLabel = e.is_active ? '⏸ השבת' : '▶ הפעל';
-        const toggleClass = e.is_active ? 'deactivate' : 'activate';
-        const shiftBadge = e.shift ? `<span class="shift-badge">${e.shift}</span>` : '';
+        const adminBtns = IS_ADMIN && e.is_active ? `
+            <button class="btn-card-action" onclick="enterEditMode(${e.id})" title="עריכה">✏️</button>
+            <button class="btn-card-action del" onclick="deleteEmployee(${e.id})" title="השבת">🗑️</button>` : '';
 
         return `
         <div class="employee-card${e.is_active ? '' : ' inactive'}" id="card-${e.id}">
-            <div class="employee-card-header">
-                <div class="emp-header-left">
-                    <div class="employee-avatar">👤</div>
-                    <div class="employee-name">${e.name}${shiftBadge}</div>
+            <!-- VIEW MODE -->
+            <div class="card-view-panel" id="view-${e.id}">
+                <div class="employee-card-header">
+                    <div class="emp-header-left">
+                        <div class="employee-avatar">👤</div>
+                        <div class="employee-name">${e.name}${shiftBadge}</div>
+                    </div>
+                    <div class="card-actions">${adminBtns}</div>
                 </div>
-                <div class="card-actions">
-                    <button class="btn-card-action ${toggleClass}"
-                        onclick="toggleActive(${e.id})" title="${toggleLabel}">${toggleLabel}</button>
-                    <button class="btn-card-action del"
-                        onclick="deleteEmployee(${e.id})" title="השבת">🗑️</button>
+                ${hoursInfo}
+                <span class="emp-rate-info">₪${e.hourly_rate}/שעה</span>
+            </div>
+
+            <!-- EDIT MODE -->
+            <div class="card-edit-panel" id="edit-${e.id}">
+                <div class="field-row">
+                    <span class="field-label">שם העובד</span>
+                    <input class="field-input" id="edit-name-${e.id}" type="text"
+                        value="${e.name}" placeholder="שם מלא">
                 </div>
+                <div class="field-row">
+                    <span class="field-label">תעריף לשעה (₪)</span>
+                    <input class="field-input" id="edit-rate-${e.id}" type="number"
+                        min="0" step="0.5" value="${e.hourly_rate}"
+                        placeholder="תעריף לשעה" style="direction:ltr;text-align:left">
+                </div>
+                <div class="field-row">
+                    <span class="field-label">משמרת</span>
+                    <select class="field-input" id="edit-shift-${e.id}" style="direction:rtl;text-align:right">
+                        <option value="" ${!e.shift ? 'selected' : ''}>גמיש</option>
+                        <option value="בוקר" ${e.shift === 'בוקר' ? 'selected' : ''}>בוקר (6:30-17:00)</option>
+                        <option value="ערב" ${e.shift === 'ערב' ? 'selected' : ''}>ערב (17:00-23:00)</option>
+                    </select>
+                </div>
+                <div class="edit-actions">
+                    <button class="btn-save-inline" onclick="saveEmployeeEdit(${e.id})">שמור</button>
+                    <button class="btn-cancel-inline" onclick="cancelEditMode(${e.id})">ביטול</button>
+                </div>
+                <div class="save-msg" id="msg-${e.id}"></div>
             </div>
-
-            ${hoursInfo}
-
-            <div class="field-row">
-                <span class="field-label">תעריף לשעה (₪)</span>
-                <input class="field-input" id="rate-${e.id}" type="number"
-                    min="0" step="0.5" value="${e.hourly_rate}"
-                    placeholder="תעריף לשעה"
-                    ${e.is_active ? '' : 'disabled'}>
-            </div>
-
-            <div class="field-row">
-                <span class="field-label">שעות חודש זה</span>
-                <input class="field-input" id="hours-${e.id}" type="number"
-                    min="0" step="0.25"
-                    value="${e.hours_worked != null ? e.hours_worked : ''}"
-                    placeholder="הזן שעות עבודה"
-                    ${e.is_active ? '' : 'disabled'}>
-            </div>
-
-            <div class="card-footer">
-                <button class="btn-save-card" id="save-btn-${e.id}"
-                    onclick="saveEmployee(${e.id})"
-                    ${e.is_active ? '' : 'disabled'}>
-                    שמור
-                </button>
-                <span id="badge-${e.id}">${badge}</span>
-            </div>
-            <div class="save-msg" id="msg-${e.id}"></div>
         </div>`;
     }).join('');
+}
+
+function enterEditMode(id) {
+    document.getElementById(`view-${id}`).classList.add('hidden');
+    document.getElementById(`edit-${id}`).classList.add('open');
+}
+
+function cancelEditMode(id) {
+    document.getElementById(`edit-${id}`).classList.remove('open');
+    document.getElementById(`view-${id}`).classList.remove('hidden');
+}
+
+async function saveEmployeeEdit(id) {
+    const name = document.getElementById(`edit-name-${id}`).value.trim();
+    const hourly_rate = parseFloat(document.getElementById(`edit-rate-${id}`).value);
+    const shift = document.getElementById(`edit-shift-${id}`).value;
+    const msgEl = document.getElementById(`msg-${id}`);
+
+    if (!name) { document.getElementById(`edit-name-${id}`).focus(); return; }
+    if (isNaN(hourly_rate) || hourly_rate <= 0) { document.getElementById(`edit-rate-${id}`).focus(); return; }
+
+    try {
+        const res = await fetch(`/api/employees/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, hourly_rate, shift }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        window.location.reload();
+    } catch (err) {
+        console.error(err);
+        msgEl.textContent = 'שגיאה בשמירה';
+        msgEl.style.color = '#fca5a5';
+    }
 }
 
 function renderPastEmployees(pastEmployees) {
@@ -710,71 +760,10 @@ async function toggleActive(id) {
     try {
         const res = await fetch(`/api/employees/${id}/toggle`, { method: 'POST' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const { is_active } = await res.json();
-
-        // Reload to reflect toggle state properly
         window.location.reload();
     } catch (err) {
         console.error(err);
         alert('שגיאה בשינוי סטטוס.');
-    }
-}
-
-// ── Save employee ──────────────────────────────────────────────
-async function saveEmployee(id) {
-    const btn        = document.getElementById(`save-btn-${id}`);
-    const rateInput  = document.getElementById(`rate-${id}`);
-    const hoursInput = document.getElementById(`hours-${id}`);
-    const msgEl      = document.getElementById(`msg-${id}`);
-    const badgeEl    = document.getElementById(`badge-${id}`);
-
-    const hourly_rate  = parseFloat(rateInput.value);
-    const hours_worked = hoursInput.value !== '' ? parseFloat(hoursInput.value) : null;
-
-    if (isNaN(hourly_rate) || hourly_rate < 0) { rateInput.focus(); return; }
-
-    btn.disabled    = true;
-    btn.textContent = 'שומר...';
-    msgEl.textContent = '';
-    msgEl.style.color = '#86efac';
-
-    try {
-        const body = { hourly_rate };
-        if (hours_worked !== null && !isNaN(hours_worked)) body.hours_worked = hours_worked;
-
-        const res = await fetch(`/api/employees/${id}`, {
-            method:  'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify(body),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const result = await res.json();
-
-        // If rematched rows exist, reload to show updated cards
-        if (result.rematched && result.rematched.length > 0) {
-            window.location.reload();
-            return;
-        }
-
-        // Update local state
-        const emp = allEmployees.find(e => e.id === id);
-        emp.hourly_rate = hourly_rate;
-        if (body.hours_worked != null) {
-            emp.hours_worked  = body.hours_worked;
-            emp.is_finalized  = true;
-            badgeEl.innerHTML = '<span class="finalized-badge">סופי ✓</span>';
-        }
-
-        renderKpis(document.getElementById('kpi-section'), apiData);
-        msgEl.textContent = 'נשמר בהצלחה ✓';
-        setTimeout(() => { msgEl.textContent = ''; }, 3000);
-    } catch (err) {
-        console.error(err);
-        msgEl.textContent = 'שגיאה בשמירה';
-        msgEl.style.color = '#fca5a5';
-    } finally {
-        btn.disabled    = false;
-        btn.textContent = 'שמור';
     }
 }
 

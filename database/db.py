@@ -259,10 +259,18 @@ def toggle_employee_active(employee_id: int) -> bool:
         if not row:
             raise ValueError(f"Employee {employee_id} not found")
         new_state = 0 if row["is_active"] else 1
-        conn.execute(
-            "UPDATE employees SET is_active = ? WHERE id = ?",
-            (new_state, employee_id),
-        )
+        if new_state:
+            # Reactivating: clear deleted_at
+            conn.execute(
+                "UPDATE employees SET is_active = 1, deleted_at = NULL WHERE id = ?",
+                (employee_id,),
+            )
+        else:
+            # Deactivating: set deleted_at
+            conn.execute(
+                "UPDATE employees SET is_active = 0, deleted_at = datetime('now') WHERE id = ?",
+                (employee_id,),
+            )
     return bool(new_state)
 
 
@@ -310,14 +318,13 @@ def get_employee_hours(month: int, year: int) -> list[sqlite3.Row]:
 
 
 def get_total_salary_cost(month: int, year: int) -> float:
-    """Sum of hours_worked * hourly_rate for all employees in month/year."""
+    """Sum total_salary from employee_monthly_hours for given month/year."""
+    month_str = f"{year:04d}-{month:02d}"
     with get_connection() as conn:
         row = conn.execute(
-            """SELECT COALESCE(SUM(eh.hours_worked * e.hourly_rate), 0) AS total
-               FROM employee_hours eh
-               JOIN employees e ON e.id = eh.employee_id
-               WHERE eh.month = ? AND eh.year = ?""",
-            (month, year),
+            "SELECT COALESCE(SUM(total_salary), 0) AS total "
+            "FROM employee_monthly_hours WHERE month = ?",
+            (month_str,),
         ).fetchone()
         return row["total"]
 

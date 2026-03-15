@@ -384,6 +384,13 @@ def api_employees_list():
     hours_rows = get_employee_hours(month_num, year_num)
     hours_by_emp = {r["employee_id"]: r for r in hours_rows}
 
+    # Also fetch deleted employees for past-month logic
+    with get_connection() as conn:
+        deleted_emps = conn.execute(
+            "SELECT id, name, hourly_rate, shift, deleted_at FROM employees "
+            "WHERE is_active = 0 AND deleted_at IS NOT NULL"
+        ).fetchall()
+
     # Build a lookup from monthly_hours by name for merging
     matched_monthly_names = set()
 
@@ -413,11 +420,51 @@ def api_employees_list():
             "hours_row_id": h["id"] if h else None,
         })
 
-    # Unmatched: monthly_hours rows with salary=0 and no active employee match
-    unmatched = [mh for mh in monthly_hours if mh["salary"] == 0 and mh["name"] not in matched_monthly_names]
+    # For monthly_hours not matched to any employee card, check deleted employees
+    unmatched = []
+    past_employees = []
 
-    # Past employees: monthly_hours with salary > 0 but no matching employee card
-    past_employees = [mh for mh in monthly_hours if mh["salary"] > 0 and mh["name"] not in matched_monthly_names]
+    for mh in monthly_hours:
+        if mh["name"] in matched_monthly_names:
+            continue
+
+        mh_name_lower = mh["name"].strip().lower()
+
+        # Check if a deleted employee matches this name
+        deleted_match = None
+        for de in deleted_emps:
+            de_name_lower = de["name"].strip().lower()
+            if de_name_lower in mh_name_lower or mh_name_lower in de_name_lower:
+                deleted_match = de
+                break
+
+        if deleted_match:
+            # Parse deleted_at month
+            deleted_at_month = deleted_match["deleted_at"][:7]  # "YYYY-MM"
+            if month_str < deleted_at_month:
+                # Selected month is before deletion → employee was active this month
+                # Add as a normal employee card
+                matched_monthly_names.add(mh["name"])
+                result.append({
+                    "id":           deleted_match["id"],
+                    "name":         deleted_match["name"],
+                    "hourly_rate":  deleted_match["hourly_rate"],
+                    "shift":        deleted_match["shift"] if deleted_match["shift"] else "",
+                    "is_active":    True,  # was active during this month
+                    "hours_worked": mh["hours"],
+                    "salary":       mh["salary"],
+                    "is_finalized": True,
+                    "hours_row_id": None,
+                    "was_active":   True,  # historical flag
+                })
+            else:
+                # Deleted before/during this month → show as past employee
+                past_employees.append(mh)
+        elif mh["salary"] == 0:
+            unmatched.append(mh)
+        else:
+            # Has salary but no employee record at all → past employee
+            past_employees.append(mh)
 
     matched_count = sum(1 for e in result if e["hours_worked"] is not None) + len(past_employees)
 
@@ -450,10 +497,13 @@ def api_employees_create():
 @app.route("/api/employees/<int:employee_id>", methods=["DELETE"])
 @login_required
 def api_employees_delete(employee_id: int):
-    # Soft-delete: set active=0 so employee_monthly_hours data stays intact
+    # Soft-delete: set active=0 + deleted_at so employee_monthly_hours data stays intact
     from database.db import get_connection
     with get_connection() as conn:
-        conn.execute("UPDATE employees SET is_active = 0 WHERE id = ?", (employee_id,))
+        conn.execute(
+            "UPDATE employees SET is_active = 0, deleted_at = datetime('now') WHERE id = ?",
+            (employee_id,),
+        )
     return jsonify({"ok": True})
 
 
@@ -473,6 +523,23 @@ def api_employees_update(employee_id: int):
     body = request.get_json(force=True)
     hourly_rate  = body.get("hourly_rate")
     hours_worked = body.get("hours_worked")
+    new_name     = body.get("name")
+    new_shift    = body.get("shift")
+
+    from database.db import get_connection
+
+    # Update name and/or shift if provided
+    if new_name is not None or new_shift is not None:
+        with get_connection() as conn:
+            if new_name is not None and new_shift is not None:
+                conn.execute("UPDATE employees SET name = ?, shift = ? WHERE id = ?",
+                             (new_name.strip(), new_shift.strip(), employee_id))
+            elif new_name is not None:
+                conn.execute("UPDATE employees SET name = ? WHERE id = ?",
+                             (new_name.strip(), employee_id))
+            else:
+                conn.execute("UPDATE employees SET shift = ? WHERE id = ?",
+                             (new_shift.strip(), employee_id))
 
     if hourly_rate is not None:
         update_employee_rate(employee_id, float(hourly_rate))
@@ -490,7 +557,6 @@ def api_employees_update(employee_id: int):
     # Rematch unmatched employee_monthly_hours rows
     rematched = []
     if hourly_rate is not None:
-        from database.db import get_connection
         with get_connection() as conn:
             emp = conn.execute("SELECT name FROM employees WHERE id = ?", (employee_id,)).fetchone()
         if emp:

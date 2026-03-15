@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS employees (
     name        TEXT    NOT NULL,
     hourly_rate REAL    NOT NULL,
     is_active   INTEGER NOT NULL DEFAULT 1, -- 1=active, 0=inactive
-    created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+    deleted_at  TEXT    DEFAULT NULL
 );
 """
 
@@ -148,12 +149,16 @@ def _migrate_daily_sales_columns(conn):
 
 
 def _migrate_employees_columns(conn):
-    """Add shift column to employees if it doesn't exist yet."""
-    try:
-        conn.execute("ALTER TABLE employees ADD COLUMN shift TEXT DEFAULT ''")
-        conn.commit()
-    except Exception:
-        pass  # Column already exists
+    """Add shift and deleted_at columns to employees if they don't exist yet."""
+    for col, definition in [
+        ("shift", "TEXT DEFAULT ''"),
+        ("deleted_at", "TEXT DEFAULT NULL"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE employees ADD COLUMN {col} {definition}")
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
 
 
 def _cleanup_duplicate_electricity(conn):

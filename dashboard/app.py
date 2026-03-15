@@ -124,6 +124,101 @@ def rematch_employee(name, hourly_rate):
     conn.close()
     return updated
 
+def get_estimated_salary(selected_month):
+    """Return salary estimate for months with no CSV data yet,
+    based on previous month's actual per-employee daily rates."""
+    from calendar import monthrange
+    from database.db import get_connection
+
+    conn = get_connection()
+
+    # Check if actual data exists for selected_month
+    actual = conn.execute(
+        "SELECT COALESCE(SUM(total_salary), 0) FROM employee_monthly_hours WHERE month=? AND total_salary>0",
+        (selected_month,),
+    ).fetchone()[0]
+
+    if actual > 0:
+        conn.close()
+        return {
+            "total": actual,
+            "is_estimated": False,
+            "elapsed_days": None,
+            "total_working_days": None,
+            "based_on_month": None,
+        }
+
+    # Find previous month with actual data (up to 3 months back)
+    year, month = int(selected_month[:4]), int(selected_month[5:7])
+    prev_month_str = None
+    prev_data = []
+    for i in range(1, 4):
+        m = month - i
+        y = year
+        if m <= 0:
+            m += 12
+            y -= 1
+        candidate = f"{y:04d}-{m:02d}"
+        rows = conn.execute(
+            "SELECT employee_name, total_hours, total_salary FROM employee_monthly_hours WHERE month=? AND total_salary>0",
+            (candidate,),
+        ).fetchall()
+        if rows:
+            prev_month_str = candidate
+            prev_data = rows
+            break
+
+    if not prev_data:
+        conn.close()
+        return {"total": 0, "is_estimated": False, "elapsed_days": None, "total_working_days": None, "based_on_month": None}
+
+    # Count working days (Sun-Fri, no Sat) in previous month
+    prev_year, prev_month_num = int(prev_month_str[:4]), int(prev_month_str[5:7])
+    days_in_prev = monthrange(prev_year, prev_month_num)[1]
+    prev_working_days = sum(
+        1 for d in range(1, days_in_prev + 1)
+        if date(prev_year, prev_month_num, d).weekday() != 5  # 5 = Saturday
+    )
+
+    # Count working days elapsed in selected_month (up to today or end of month)
+    sel_year, sel_month_num = int(selected_month[:4]), int(selected_month[5:7])
+    days_in_sel = monthrange(sel_year, sel_month_num)[1]
+    today = date.today()
+    last_day = min(today.day if (today.year == sel_year and today.month == sel_month_num) else days_in_sel, days_in_sel)
+    elapsed_working = sum(
+        1 for d in range(1, last_day + 1)
+        if date(sel_year, sel_month_num, d).weekday() != 5
+    )
+    total_working = sum(
+        1 for d in range(1, days_in_sel + 1)
+        if date(sel_year, sel_month_num, d).weekday() != 5
+    )
+
+    # Calculate per-employee daily rate and estimate
+    total_estimated = 0
+    employee_estimates = []
+    for row in prev_data:
+        daily_rate = row["total_salary"] / prev_working_days
+        estimated = round(daily_rate * elapsed_working, 2)
+        total_estimated += estimated
+        employee_estimates.append({
+            "name": row["employee_name"],
+            "prev_salary": row["total_salary"],
+            "daily_rate": round(daily_rate, 2),
+            "estimated_salary": estimated,
+        })
+
+    conn.close()
+    return {
+        "total": round(total_estimated, 2),
+        "is_estimated": True,
+        "elapsed_days": elapsed_working,
+        "total_working_days": total_working,
+        "based_on_month": prev_month_str,
+        "employees": employee_estimates,
+    }
+
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -314,9 +409,26 @@ def electricity_history():
 def api_summary():
     """Return KPIs and estimated profit for ?month=YYYY-MM (default: current)."""
     selected = _parse_month_param()
-    data = calculate_estimated_profit(selected.month, selected.year)
-    # Count unmatched employees (total_salary=0 in employee_monthly_hours)
     month_str = selected.strftime("%Y-%m")
+
+    # Get salary (actual or estimated)
+    salary_result = get_estimated_salary(month_str)
+    salary = salary_result["total"]
+    salary_is_estimated = salary_result["is_estimated"]
+
+    data = calculate_estimated_profit(selected.month, selected.year)
+    # Override salary with our estimated value
+    data["salary"] = salary
+    # Recalculate profit with the (possibly estimated) salary
+    data["profit"] = data["income"] - data["goods"] - data["fixed_prorated"] - salary
+
+    data["salary_is_estimated"] = salary_is_estimated
+    if salary_is_estimated:
+        data["salary_estimation_info"] = salary_result
+    else:
+        data["salary_estimation_info"] = None
+
+    # Count unmatched employees (total_salary=0 in employee_monthly_hours)
     from database.db import get_connection
     with get_connection() as conn:
         unmatched = conn.execute(

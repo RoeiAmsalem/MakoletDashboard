@@ -162,11 +162,13 @@ function renderKpis(section, d) {
                           : d.profit < 0 ? 'kpi-card--loss'
                           : 'kpi-card--neutral';
     const profitValClass  = d.profit >= 0 ? 'profit' : 'loss';
-    const badgeClass      = d.is_finalized ? 'finalized' : 'estimated';
+    const anyEstimated    = !d.is_finalized || d.salary_is_estimated;
+    const badgeClass      = anyEstimated ? 'estimated' : 'finalized';
     const onlyElectricity = !d.income && !d.goods && !d.salary && d.electricity > 0;
-    const badgeText       = d.is_finalized ? 'סופי'
+    const badgeText       = !anyEstimated ? 'סופי'
                           : onlyElectricity ? 'משוער · חשמל בלבד עד היום'
                           : 'משוער';
+    const profitLabel     = anyEstimated ? 'רווח משוער' : 'רווח חודשי';
     const pct             = Math.min(100, Math.round(d.ratio * 100));
 
     // Show ratio bar only for current month
@@ -182,7 +184,7 @@ function renderKpis(section, d) {
         <div class="kpi-card ${profitCardClass}">
             <div class="kpi-header">
                 <span class="kpi-icon">💰</span>
-                <span class="kpi-label">${isCurrentMonth ? 'רווח חודש שוטף' : 'רווח חודשי'}</span>
+                <span class="kpi-label">${isCurrentMonth ? (anyEstimated ? 'רווח משוער' : 'רווח חודש שוטף') : profitLabel}</span>
             </div>
             <span class="kpi-value ${profitValClass}">${formatMoney(d.profit)}</span>
             <span class="kpi-badge ${badgeClass}">${badgeText}</span>
@@ -219,6 +221,8 @@ function renderKpis(section, d) {
                 <span class="kpi-label">שכר עובדים</span>
             </div>
             <span class="kpi-value salary">${formatMoney(d.salary)}</span>
+            ${d.salary_is_estimated ? `<span class="kpi-badge estimated">~ משוער</span>
+            <span style="font-size:0.72rem;color:rgba(241,245,249,0.5);margin-top:0.15rem">מבוסס על ${d.salary_estimation_info.elapsed_days} / ${d.salary_estimation_info.total_working_days} ימי עבודה</span>` : ''}
             ${d.unmatched_employees > 0 ? `<span style="font-size:0.75rem;color:#fde68a;margin-top:0.2rem">⚠️ ${d.unmatched_employees} עובדים לא זוהו</span>` : ''}
         </div>
     `;

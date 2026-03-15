@@ -590,19 +590,9 @@ async function saveNewEmployee() {
             body:    JSON.stringify({ name, hourly_rate, shift }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const { id } = await res.json();
 
-        allEmployees.push({
-            id, name, hourly_rate, shift, is_active: true,
-            hours_worked: null, is_finalized: false,
-        });
-        renderCards(document.getElementById('employee-cards'), allEmployees);
-        renderKpis(document.getElementById('kpi-section'), allEmployees);
-
-        nameInput.value = '';
-        rateInput.value = '';
-        shiftInput.value = '';
-        document.getElementById('add-emp-panel').classList.remove('open');
+        // Reload page so rematched cards appear immediately
+        window.location.reload();
     } catch (err) {
         console.error(err);
         alert('שגיאה בהוספת עובד.');
@@ -671,6 +661,13 @@ async function saveEmployee(id) {
             body:    JSON.stringify(body),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const result = await res.json();
+
+        // If rematched rows exist, reload to show updated cards
+        if (result.rematched && result.rematched.length > 0) {
+            window.location.reload();
+            return;
+        }
 
         // Update local state
         const emp = allEmployees.find(e => e.id === id);

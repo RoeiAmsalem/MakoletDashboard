@@ -72,6 +72,33 @@ from database.db import (
 _ELEC_BILLS_DIR = os.path.join(_PROJECT_ROOT, "data", "electricity_bills")
 _Z_PDFS_DIR = os.path.join(_PROJECT_ROOT, "data", "z_pdfs")
 
+
+def rematch_employee(name, hourly_rate):
+    """After an employee is created or updated, find any unmatched rows in
+    employee_monthly_hours where total_salary=0 and the name fuzzy-matches,
+    then calculate and update their salary."""
+    from database.db import get_connection
+    conn = get_connection()
+    unmatched = conn.execute(
+        "SELECT id, employee_name, month, total_hours FROM employee_monthly_hours WHERE total_salary = 0"
+    ).fetchall()
+
+    updated = []
+    for row in unmatched:
+        csv_name = row["employee_name"].strip().lower()
+        db_name = name.strip().lower()
+        if db_name in csv_name or csv_name in db_name:
+            salary = row["total_hours"] * hourly_rate
+            conn.execute(
+                "UPDATE employee_monthly_hours SET total_salary = ?, employee_name = ? WHERE id = ?",
+                (salary, name, row["id"]),
+            )
+            updated.append({"month": row["month"], "hours": row["total_hours"], "salary": salary})
+
+    conn.commit()
+    conn.close()
+    return updated
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -363,7 +390,8 @@ def api_employees_create():
     if hourly_rate <= 0:
         return jsonify({"error": "hourly_rate must be > 0"}), 400
     new_id = insert_employee(name, float(hourly_rate), shift=shift)
-    return jsonify({"ok": True, "id": new_id}), 201
+    rematched = rematch_employee(name, float(hourly_rate))
+    return jsonify({"ok": True, "id": new_id, "rematched": rematched}), 201
 
 
 @app.route("/api/employees/<int:employee_id>", methods=["DELETE"])
@@ -403,7 +431,16 @@ def api_employees_update(employee_id: int):
             is_finalized=True,
         )
 
-    return jsonify({"ok": True})
+    # Rematch unmatched employee_monthly_hours rows
+    rematched = []
+    if hourly_rate is not None:
+        from database.db import get_connection
+        with get_connection() as conn:
+            emp = conn.execute("SELECT name FROM employees WHERE id = ?", (employee_id,)).fetchone()
+        if emp:
+            rematched = rematch_employee(emp["name"], float(hourly_rate))
+
+    return jsonify({"ok": True, "rematched": rematched})
 
 
 @app.route("/api/employees/upload-csv", methods=["POST"])

@@ -385,7 +385,36 @@ def employees():
 @app.route("/goods")
 @login_required
 def goods():
-    return render_template("goods.html", **_month_context())
+    ctx = _month_context()
+    selected_month = ctx["selected_month"]
+
+    from database.db import get_connection
+    conn = get_connection()
+    rows = conn.execute('''
+        SELECT ref_number, description AS supplier, date, amount,
+               total_without_vat, doc_type, doc_type_name
+        FROM expenses
+        WHERE category='goods' AND date LIKE ?
+        ORDER BY date DESC
+    ''', (f'{selected_month}%',)).fetchall()
+    conn.close()
+
+    rows = [dict(r) for r in rows]
+    total = sum(r['amount'] or 0 for r in rows)
+    invoices_total = sum(r['amount'] or 0 for r in rows if r['doc_type'] == 3)
+    delivery_total = sum(r['amount'] or 0 for r in rows if r['doc_type'] == 2)
+    returns_total = sum(r['amount'] or 0 for r in rows if r['doc_type'] == 5)
+    count = len(rows)
+
+    return render_template('goods.html',
+        rows=rows,
+        total=total,
+        invoices_total=invoices_total,
+        delivery_total=delivery_total,
+        returns_total=returns_total,
+        count=count,
+        **ctx,
+    )
 
 
 @app.route("/sales")

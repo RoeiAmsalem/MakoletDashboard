@@ -8,16 +8,20 @@
     <style>
         /* ── Green accent overrides ── */
         .page-accent        { color: #34d399; }
-        .kpi-card--goods {
-            background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
-            border-color: rgba(52,211,153,0.25);
+        .kpi-card--goods-total {
+            background: linear-gradient(135deg, #4c8ffb, #3a7de8);
+            border-color: rgba(76,143,251,0.25);
+        }
+        .kpi-card--goods-expense {
+            background: linear-gradient(135deg, #c0392b, #a93226);
+            border-color: rgba(192,57,43,0.25);
         }
         .kpi-card--returns {
-            background: linear-gradient(135deg, #4a1420 0%, #5c1a2a 100%);
-            border-color: rgba(248,113,113,0.25);
+            background: linear-gradient(135deg, #1a7a4c, #15803d);
+            border-color: rgba(52,211,153,0.25);
         }
-        .kpi-value.goods    { color: #6ee7b7; }
-        .kpi-value.returns  { color: #fca5a5; }
+        .kpi-value.goods    { color: #fff; }
+        .kpi-value.returns  { color: #6ee7b7; }
 
         /* ── Table card ── */
         .table-card {
@@ -175,7 +179,7 @@
 
     <!-- KPI cards -->
     <section class="cards-grid">
-        <div class="kpi-card kpi-card--goods">
+        <div class="kpi-card kpi-card--goods-total">
             <div class="kpi-header">
                 <span class="kpi-icon">🛒</span>
                 <span class="kpi-label">סה"כ סחורה</span>
@@ -183,14 +187,14 @@
             <span class="kpi-value goods">₪{{ '{:,.2f}'.format(total) }}</span>
             <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">{{ count }} מסמכים</span>
         </div>
-        <div class="kpi-card kpi-card--goods">
+        <div class="kpi-card kpi-card--goods-expense">
             <div class="kpi-header">
                 <span class="kpi-icon">📄</span>
                 <span class="kpi-label">חשבוניות</span>
             </div>
             <span class="kpi-value goods">₪{{ '{:,.2f}'.format(invoices_total) }}</span>
         </div>
-        <div class="kpi-card kpi-card--goods">
+        <div class="kpi-card kpi-card--goods-expense">
             <div class="kpi-header">
                 <span class="kpi-icon">🚚</span>
                 <span class="kpi-label">תעודות משלוח</span>

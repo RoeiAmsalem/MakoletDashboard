@@ -189,11 +189,18 @@ class BilBoyAgent(BaseAgent):
         return self._fetch_invoices(from_date=target_date, to_date=target_date)
 
     def save_to_db(self, data: list[dict]) -> None:
-        """Insert each document as an expense with category='goods', skipping duplicates."""
+        """Insert each document as an expense with category='goods', skipping duplicates.
+        Also updates existing rows that have amount=0 (e.g. delivery notes filled in later)."""
         saved = 0
+        updated = 0
         saved_dates = set()
         for record in data:
             if self._is_duplicate(record):
+                # Try to update if existing row has amount=0 and new data has a real amount
+                if record.get("ref_number") and record.get("amount"):
+                    if self._update_zero_amount(record):
+                        updated += 1
+                        saved_dates.add(record["date"])
                 continue
             self._insert_bilboy_expense(record)
             saved += 1
@@ -201,8 +208,26 @@ class BilBoyAgent(BaseAgent):
         # Resolve any pending fetches for dates we successfully saved
         for d in saved_dates:
             resolve_pending_fetch("bilboy", d)
-        self.logger.info("[bilboy] Saved %d expense records to DB (%d skipped as duplicates)",
-                         saved, len(data) - saved)
+        self.logger.info("[bilboy] Saved %d, updated %d zero-amount rows (%d skipped as duplicates)",
+                         saved, updated, len(data) - saved - updated)
+
+    @staticmethod
+    def _update_zero_amount(record: dict) -> bool:
+        """Update an existing row that has amount=0 with new data from the API."""
+        with get_connection() as conn:
+            cur = conn.execute(
+                """UPDATE expenses SET amount=?, total_without_vat=?, doc_type_name=?,
+                   description=?
+                   WHERE ref_number=? AND category='goods' AND amount=0""",
+                (
+                    record["amount"],
+                    record.get("total_without_vat"),
+                    record.get("doc_type_name"),
+                    record.get("description"),
+                    record["ref_number"],
+                ),
+            )
+            return cur.rowcount > 0
 
     @staticmethod
     def _is_duplicate(record: dict) -> bool:

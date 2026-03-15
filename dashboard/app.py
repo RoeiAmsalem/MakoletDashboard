@@ -73,24 +73,49 @@ _ELEC_BILLS_DIR = os.path.join(_PROJECT_ROOT, "data", "electricity_bills")
 _Z_PDFS_DIR = os.path.join(_PROJECT_ROOT, "data", "z_pdfs")
 
 
+def _get_rate_for_month(conn, employee_id, month_str, fallback_rate):
+    """Look up the hourly rate effective during a given YYYY-MM month.
+    Falls back to the employee's current hourly_rate if no history found."""
+    # month_str is "YYYY-MM"; derive first and last day
+    first_day = month_str + "-01"
+    import calendar
+    y, m = int(month_str[:4]), int(month_str[5:7])
+    last_day = f"{month_str}-{calendar.monthrange(y, m)[1]:02d}"
+    row = conn.execute(
+        "SELECT hourly_rate FROM employee_rate_history "
+        "WHERE employee_id = ? AND effective_from <= ? "
+        "AND (effective_to IS NULL OR effective_to >= ?) "
+        "ORDER BY effective_from DESC LIMIT 1",
+        (employee_id, last_day, first_day),
+    ).fetchone()
+    return row["hourly_rate"] if row else fallback_rate
+
+
 def rematch_employee(name, hourly_rate):
     """After an employee is created or updated, find any unmatched rows in
     employee_monthly_hours where total_salary=0 and the name fuzzy-matches,
-    then calculate and update their salary."""
+    then calculate and update their salary using the historical rate."""
     from database.db import get_connection
     conn = get_connection()
     unmatched = conn.execute(
         "SELECT id, employee_name, month, total_hours FROM employee_monthly_hours WHERE total_salary = 0"
     ).fetchall()
 
+    # Look up employee_id for rate history
+    emp_row = conn.execute(
+        "SELECT id FROM employees WHERE LOWER(TRIM(name)) = ?", (name.strip().lower(),)
+    ).fetchone()
+    emp_id = emp_row["id"] if emp_row else None
+
     updated = []
     for row in unmatched:
         csv_name = row["employee_name"].strip().lower()
         db_name = name.strip().lower()
         if db_name in csv_name or csv_name in db_name:
-            salary = row["total_hours"] * hourly_rate
+            rate = _get_rate_for_month(conn, emp_id, row["month"], hourly_rate) if emp_id else hourly_rate
+            salary = row["total_hours"] * rate
             conn.execute(
-                "UPDATE employee_monthly_hours SET total_salary = ?, employee_name = ? WHERE id = ?",
+                "UPDATE employee_monthly_hours SET total_salary = ?, employee_name = ? WHERE id = ? AND total_salary = 0",
                 (salary, name, row["id"]),
             )
             updated.append({"month": row["month"], "hours": row["total_hours"], "salary": salary})
@@ -354,7 +379,7 @@ def api_employees_list():
     if active_emps:
         with get_connection() as conn:
             unmatched_rows = conn.execute(
-                "SELECT id, employee_name, total_hours FROM employee_monthly_hours "
+                "SELECT id, employee_name, month, total_hours FROM employee_monthly_hours "
                 "WHERE total_salary = 0"
             ).fetchall()
         for row in unmatched_rows:
@@ -362,10 +387,11 @@ def api_employees_list():
             for emp in active_emps:
                 db_name = emp["name"].strip().lower()
                 if db_name in csv_name or csv_name in db_name:
-                    salary = row["total_hours"] * emp["hourly_rate"]
                     with get_connection() as conn:
+                        rate = _get_rate_for_month(conn, emp["id"], row["month"], emp["hourly_rate"])
+                        salary = row["total_hours"] * rate
                         conn.execute(
-                            "UPDATE employee_monthly_hours SET total_salary = ?, employee_name = ? WHERE id = ?",
+                            "UPDATE employee_monthly_hours SET total_salary = ?, employee_name = ? WHERE id = ? AND total_salary = 0",
                             (salary, emp["name"], row["id"]),
                         )
                     break
@@ -490,6 +516,14 @@ def api_employees_create():
     if hourly_rate <= 0:
         return jsonify({"error": "hourly_rate must be > 0"}), 400
     new_id = insert_employee(name, float(hourly_rate), shift=shift)
+    # Seed initial rate history entry
+    from database.db import get_connection
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO employee_rate_history (employee_id, hourly_rate, effective_from) "
+            "VALUES (?, ?, date('now'))",
+            (new_id, float(hourly_rate)),
+        )
     rematched = rematch_employee(name, float(hourly_rate))
     return jsonify({"ok": True, "id": new_id, "rematched": rematched}), 201
 
@@ -542,6 +576,18 @@ def api_employees_update(employee_id: int):
                              (new_shift.strip(), employee_id))
 
     if hourly_rate is not None:
+        # Close current rate history entry and insert new one
+        with get_connection() as conn:
+            conn.execute(
+                "UPDATE employee_rate_history SET effective_to = date('now') "
+                "WHERE employee_id = ? AND effective_to IS NULL",
+                (employee_id,),
+            )
+            conn.execute(
+                "INSERT INTO employee_rate_history (employee_id, hourly_rate, effective_from) "
+                "VALUES (?, ?, date('now'))",
+                (employee_id, float(hourly_rate)),
+            )
         update_employee_rate(employee_id, float(hourly_rate))
 
     if hours_worked is not None:

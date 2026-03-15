@@ -84,6 +84,17 @@ CREATE TABLE IF NOT EXISTS employee_monthly_hours (
 );
 """
 
+CREATE_EMPLOYEE_RATE_HISTORY = """
+CREATE TABLE IF NOT EXISTS employee_rate_history (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id     INTEGER NOT NULL,
+    hourly_rate     REAL    NOT NULL,
+    effective_from  TEXT    NOT NULL,
+    effective_to    TEXT,
+    created_at      TEXT    DEFAULT (datetime('now'))
+);
+"""
+
 CREATE_PENDING_FETCHES = """
 CREATE TABLE IF NOT EXISTS pending_fetches (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,6 +117,7 @@ ALL_TABLES = [
     CREATE_FIXED_EXPENSES,
     CREATE_AGENT_LOGS,
     CREATE_EMPLOYEE_MONTHLY_HOURS,
+    CREATE_EMPLOYEE_RATE_HISTORY,
     CREATE_PENDING_FETCHES,
 ]
 
@@ -159,6 +171,23 @@ def _migrate_employees_columns(conn):
             conn.commit()
         except Exception:
             pass  # Column already exists
+    _seed_employee_rate_history(conn)
+
+
+def _seed_employee_rate_history(conn):
+    """Seed employee_rate_history for any employees that don't have an entry yet."""
+    employees = conn.execute("SELECT id, hourly_rate, created_at FROM employees").fetchall()
+    for emp in employees:
+        exists = conn.execute(
+            "SELECT id FROM employee_rate_history WHERE employee_id = ?", (emp[0],)
+        ).fetchone()
+        if not exists:
+            from_date = emp[2][:10] if emp[2] else "2026-01-01"
+            conn.execute(
+                "INSERT INTO employee_rate_history (employee_id, hourly_rate, effective_from) VALUES (?, ?, ?)",
+                (emp[0], emp[1], from_date),
+            )
+    conn.commit()
 
 
 def _cleanup_duplicate_electricity(conn):

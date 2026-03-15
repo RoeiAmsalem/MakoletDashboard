@@ -590,7 +590,21 @@ function renderCards(container, employees, unmatched, pastEmployees) {
 
         const adminBtns = IS_ADMIN && e.is_active ? `
             <button class="btn-card-action" onclick="enterEditMode(${e.id})" title="עריכה">✏️</button>
-            <button class="btn-card-action del" onclick="deleteEmployee(${e.id})" title="השבת">🗑️</button>` : '';
+            <button onclick="deleteEmployee(${e.id})" title="מחק עובד"
+                    style="background:none; border:none; cursor:pointer; padding:4px 6px;
+                           color:#ef4444; border-radius:4px; transition:background 0.2s;"
+                    onmouseover="this.style.background='rgba(239,68,68,0.15)'"
+                    onmouseout="this.style.background='none'">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                     viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path>
+                    <path d="M10 11v6"></path>
+                    <path d="M14 11v6"></path>
+                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path>
+                </svg>
+            </button>` : '';
 
         return `
         <div class="employee-card${e.is_active ? '' : ' inactive'}" id="card-${e.id}">

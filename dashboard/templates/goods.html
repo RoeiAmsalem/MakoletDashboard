@@ -223,7 +223,7 @@
             <span id="docs-count" style="font-size:0.85rem;color:var(--text-secondary)">{{ count }} מסמכים</span>
         </div>
         <div style="overflow-x:auto">
-            <table class="data-table">
+            <table class="data-table" id="docs-table">
                 <thead>
                     <tr>
                         <th>תאריך</th>
@@ -305,8 +305,28 @@ filterBtns.forEach(btn => {
         });
 
         docsCount.textContent = visible + ' מסמכים';
+        updateFooterTotals();
     });
 });
+
+function updateFooterTotals() {
+    let totalWithVat = 0;
+    let totalBeforeVat = 0;
+    document.querySelectorAll('#docs-table tbody tr[data-doctype]').forEach(row => {
+        if (row.style.display === 'none') return;
+        const cells = row.querySelectorAll('td');
+        const beforeVat = parseFloat(cells[cells.length - 2]?.textContent?.replace(/[₪,]/g, '') || 0);
+        const withVat = parseFloat(cells[cells.length - 1]?.textContent?.replace(/[₪,]/g, '') || 0);
+        if (!isNaN(beforeVat)) totalBeforeVat += beforeVat;
+        if (!isNaN(withVat)) totalWithVat += withVat;
+    });
+    const footer = document.querySelector('#docs-table tfoot tr');
+    if (footer) {
+        const cells = footer.querySelectorAll('td');
+        cells[cells.length - 2].textContent = '₪' + totalBeforeVat.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+        cells[cells.length - 1].textContent = '₪' + totalWithVat.toLocaleString('he-IL', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+}
 
 // Hamburger menu toggle
 document.getElementById('hamburger').addEventListener('click', function() {

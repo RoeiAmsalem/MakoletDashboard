@@ -209,12 +209,9 @@ def saturday_reconciliation():
     """
     Full-month BilBoy reconciliation — runs every Saturday.
 
-    Fetches ALL documents from BilBoy API for the current month and compares
-    against DB.  Inserts missing docs and deletes DB rows that no longer
-    exist in the API (BilBoy is the source of truth).
-
-    Key is (date, ref_number) for rows that have ref_number,
-    falling back to (date, amount, description) for legacy rows.
+    Strategy: full replace.  Delete all bilboy goods rows for the period,
+    then re-insert everything from the API with complete fields.
+    This avoids duplicate-key ambiguity (two docs with same date+amount+supplier).
     """
     today = date.today()
     from_date = date(today.year, today.month, 1).isoformat()
@@ -233,116 +230,63 @@ def saturday_reconciliation():
         )
         return
 
-    # Build API lookup by ref_number (primary) and legacy key (fallback)
-    api_by_ref: dict[tuple, dict] = {}
-    api_by_legacy: dict[tuple, dict] = {}
-    for r in api_records:
-        ref = r.get("ref_number") or ""
-        if ref:
-            api_by_ref[(r["date"], ref)] = r
-        api_by_legacy[(r["date"], r["amount"], r["description"])] = r
-
-    # Build DB lookup
+    # Count existing rows before delete
     with get_connection() as conn:
-        db_rows = conn.execute(
-            "SELECT id, date, amount, description, ref_number FROM expenses "
+        old_count = conn.execute(
+            "SELECT COUNT(*) FROM expenses "
             "WHERE category='goods' AND source='bilboy' "
             "AND date >= ? AND date <= ?",
             (from_date, to_date),
-        ).fetchall()
+        ).fetchone()[0]
+        old_total = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) FROM expenses "
+            "WHERE category='goods' AND source='bilboy' "
+            "AND date >= ? AND date <= ?",
+            (from_date, to_date),
+        ).fetchone()[0]
 
-    db_by_ref: dict[tuple, list[int]] = {}
-    db_by_legacy: dict[tuple, list[int]] = {}
-    db_matched_ids = set()
+    # Delete all bilboy goods rows for the period
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM expenses "
+            "WHERE category='goods' AND source='bilboy' "
+            "AND date >= ? AND date <= ?",
+            (from_date, to_date),
+        )
+    logger.info("[reconciliation] Deleted %d old rows (total was %.2f)", old_count, old_total)
 
-    for row in db_rows:
-        row_id = row[0]
-        ref = row[4] or ""
-        if ref:
-            key = (row[1], ref)
-            db_by_ref.setdefault(key, []).append(row_id)
-        legacy_key = (row[1], float(row[2]), row[3])
-        db_by_legacy.setdefault(legacy_key, []).append(row_id)
-
-    # --- Match: find DB rows that exist in API ---
-    for key in db_by_ref:
-        if key in api_by_ref:
-            for rid in db_by_ref[key]:
-                db_matched_ids.add(rid)
-
-    for key in db_by_legacy:
-        if key in api_by_legacy:
-            for rid in db_by_legacy[key]:
-                db_matched_ids.add(rid)
-
-    # --- Find API records not in DB ---
+    # Re-insert all from API with full fields
     inserted_count = 0
     inserted_amount = 0.0
     for r in api_records:
-        ref = r.get("ref_number") or ""
-        # Check if already in DB by ref_number
-        if ref and (r["date"], ref) in db_by_ref:
-            continue
-        # Check by legacy key
-        legacy_key = (r["date"], r["amount"], r["description"])
-        if legacy_key in db_by_legacy:
-            continue
-        # Not in DB — insert
         agent._insert_bilboy_expense(r)
         inserted_count += 1
         inserted_amount += r["amount"]
-        logger.info("[reconciliation] Inserted: %s | %s | %s | %.2f",
-                     r["date"], r.get("doc_type_name", ""), r["description"], r["amount"])
-
-    # --- Delete: DB rows not matched to any API record ---
-    all_db_ids = {row[0] for row in db_rows}
-    orphan_ids = all_db_ids - db_matched_ids
-    deleted_count = 0
-    deleted_amount = 0.0
-    if orphan_ids:
-        with get_connection() as conn:
-            for row in db_rows:
-                if row[0] in orphan_ids:
-                    conn.execute("DELETE FROM expenses WHERE id = ?", (row[0],))
-                    deleted_count += 1
-                    deleted_amount += float(row[2])
-                    logger.info("[reconciliation] Deleted id=%d: %s | %s | %.2f",
-                                 row[0], row[1], row[3], float(row[2]))
 
     # Final month total
     goods_total = get_total_expenses_by_category(today.month, today.year).get("goods", 0)
 
     # --- Telegram summary ---
-    if inserted_count == 0 and deleted_count == 0:
-        msg = (
-            "\U0001f504 \u05d4\u05ea\u05d0\u05de\u05d4 \u05e9\u05d1\u05d5\u05e2\u05d9\u05ea \u2014 BilBoy\n"
-            f"\U0001f4c5 {date(today.year, today.month, 1).strftime('%d/%m/%Y')} "
-            f"\u05e2\u05d3 {today.strftime('%d/%m/%Y')}\n\n"
-            f"\u2705 \u05d4\u05db\u05dc \u05de\u05e1\u05d5\u05e0\u05db\u05e8\u05df \u2014 "
-            f"\u05d0\u05d9\u05df \u05d4\u05e4\u05e8\u05e9\u05d9\u05dd"
-        )
+    diff_count = inserted_count - old_count
+    diff_amount = inserted_amount - old_total
+    lines = [
+        f"\U0001f504 \u05d4\u05ea\u05d0\u05de\u05d4 \u05e9\u05d1\u05d5\u05e2\u05d9\u05ea \u2014 BilBoy",
+        f"\U0001f4c5 {date(today.year, today.month, 1).strftime('%d/%m/%Y')} "
+        f"\u05e2\u05d3 {today.strftime('%d/%m/%Y')}",
+        "",
+        f"\U0001f4e6 {inserted_count} \u05de\u05e1\u05de\u05db\u05d9\u05dd \u05de\u05d4-API",
+    ]
+    if diff_count == 0 and abs(diff_amount) < 0.01:
+        lines.append("\u2705 \u05d4\u05db\u05dc \u05de\u05e1\u05d5\u05e0\u05db\u05e8\u05df")
     else:
-        lines = [
-            f"\U0001f504 \u05d4\u05ea\u05d0\u05de\u05d4 \u05e9\u05d1\u05d5\u05e2\u05d9\u05ea \u2014 BilBoy",
-            f"\U0001f4c5 {date(today.year, today.month, 1).strftime('%d/%m/%Y')} "
-            f"\u05e2\u05d3 {today.strftime('%d/%m/%Y')}",
-            "",
-        ]
-        if inserted_count:
-            lines.append(
-                f"\u2705 \u05e0\u05d5\u05e1\u05e4\u05d5: {inserted_count} \u05de\u05e1\u05de\u05db\u05d9\u05dd"
-                f" | \u20aa{inserted_amount:,.2f}"
-            )
-        if deleted_count:
-            lines.append(
-                f"\U0001f5d1\ufe0f \u05e0\u05de\u05d7\u05e7\u05d5: {deleted_count} \u05de\u05e1\u05de\u05db\u05d9\u05dd"
-                f" | \u20aa{deleted_amount:,.2f}"
-            )
-        lines.append(
-            f"\U0001f4b0 \u05e1\u05d4\u05f4\u05db {_format_month(today)} "
-            f"\u05d0\u05d7\u05e8\u05d9 \u05d4\u05ea\u05d0\u05de\u05d4: \u20aa{goods_total:,.2f}"
-        )
-        msg = "\n".join(lines)
+        if diff_count != 0:
+            lines.append(f"\u0394 \u05de\u05e1\u05de\u05db\u05d9\u05dd: {diff_count:+d}")
+        if abs(diff_amount) >= 0.01:
+            lines.append(f"\u0394 \u05e1\u05db\u05d5\u05dd: \u20aa{diff_amount:+,.2f}")
+    lines.append(
+        f"\U0001f4b0 \u05e1\u05d4\u05f4\u05db {_format_month(today)}: \u20aa{goods_total:,.2f}"
+    )
+    msg = "\n".join(lines)
 
     send_alert(msg, force=True)
     logger.info(

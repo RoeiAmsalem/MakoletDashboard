@@ -1,246 +1,327 @@
-# 🏪 Makolet Dashboard - מערכת ניהול כספי למכולת
+# Makolet Dashboard - מערכת ניהול כספי למכולת
 
-## סקירה כללית
-מערכת אוטומטית שמוציאה נתונים כספיים ממספר אתרים כל לילה,
-שומרת אותם ב-DB, ומציגה דשבורד ויזואלי עם השוואות חודשיות.
+## Overview
 
----
-
-## ארכיטקטורה - Multi-Agent System
-
-```
-Orchestrator (scheduler.py)
-├── 🤖 agents/aviv_pos.py        → מכירות יומיות מאביב קופות
-├── 🤖 agents/bilboy.py          → חשבוניות סחורה מ-Bilboy
-├── 🤖 agents/electricity.py     → חשבון חשמל מחברת חשמל ישראל
-└── 🤖 agents/municipality.py   → ארנונה מפורטל העירייה
-         ↓
-    📦 database/db.py (SQLite)
-         ↓
-    🌐 dashboard/app.py (Flask + HTML/JS)
-         ↓
-    📱 notifications/whatsapp.py (התראות כשסוכן נכשל)
-```
+Automated financial management system for a small grocery store (מכולת).
+Agents fetch data nightly from APIs and email, store in SQLite, and display via a Flask dashboard.
+Notifications go via Telegram (primary) and WhatsApp (fallback).
 
 ---
 
-## מבנה תיקיות
+## Architecture
 
 ```
-makolet-dashboard/
-├── CLAUDE.md                  ← הקובץ הזה
+scheduler.py (APScheduler, Asia/Jerusalem)
+├── agents/bilboy.py           → goods invoices via BilBoy REST API
+├── agents/aviv_alerts.py      → daily sales via Gmail IMAP + PDF extraction
+├── agents/electricity.py      → electricity bills via Gmail IMAP + PDF
+├── agents/employee_hours.py   → attendance CSV via Gmail IMAP
+└── agents/base_agent.py       → abstract base: retry logic, pending fetches, alerts
+         ↓
+    database/db.py (SQLite, raw sql, no ORM)
+         ↓
+    dashboard/app.py (Flask + Flask-Login, Chart.js frontend)
+         ↓
+    notifications/whatsapp.py (Telegram primary, WhatsApp fallback)
+```
+
+---
+
+## Directory Structure
+
+```
+MakoletDashboard/
+├── CLAUDE.md
 ├── README.md
 ├── requirements.txt
-├── .env                       ← סיסמאות ומפתחות (לא ב-git!)
-├── .env.example               ← תבנית ל-.env
+├── run.py                         ← Flask entry point
+├── scheduler.py                   ← APScheduler nightly orchestrator
+├── .env                           ← secrets (not in git)
 ├── .gitignore
 │
-├── agents/                    ← סוכני ה-scraping
+├── agents/
 │   ├── __init__.py
-│   ├── base_agent.py          ← מחלקת בסיס לכל הסוכנים
-│   ├── aviv_pos.py            ← סוכן אביב קופות
-│   ├── bilboy.py              ← סוכן Bilboy
-│   ├── electricity.py         ← סוכן חברת חשמל
-│   └── municipality.py        ← סוכן ארנונה
+│   ├── base_agent.py              ← ABC with retry, pending fetches, notifications
+│   ├── bilboy.py                  ← BilBoy REST API agent (token auth, auto-refresh)
+│   ├── aviv_alerts.py             ← Gmail IMAP → Z-report PDFs → daily sales
+│   ├── electricity.py             ← Gmail IMAP → IEC bill PDFs → expenses
+│   ├── employee_hours.py          ← Gmail IMAP → attendance CSV → hours
+│   └── parse_attendance_csv.py    ← CSV parser helper for employee_hours
 │
 ├── database/
 │   ├── __init__.py
-│   ├── db.py                  ← חיבור ל-SQLite + פונקציות CRUD
-│   ├── models.py              ← הגדרת טבלאות
-│   └── makolet.db             ← קובץ ה-DB (לא ב-git!)
+│   ├── db.py                      ← SQLite connection + all CRUD functions (~650 LOC)
+│   ├── models.py                  ← CREATE TABLE statements + migrations
+│   └── makolet.db                 ← SQLite file (generated, not in git)
 │
 ├── dashboard/
-│   ├── app.py                 ← Flask server
+│   ├── __init__.py
+│   ├── app.py                     ← Flask server with auth (~1400 LOC)
 │   ├── templates/
-│   │   └── index.html         ← דשבורד ראשי
+│   │   ├── index.html             ← Home dashboard with KPI cards + charts
+│   │   ├── login.html
+│   │   ├── sales.html             ← Daily sales view
+│   │   ├── goods.html             ← BilBoy documents table
+│   │   ├── electricity_history.html
+│   │   ├── employees.html         ← Staff management + CSV upload
+│   │   └── fixed_expenses.html
 │   └── static/
-│       ├── css/style.css
-│       └── js/charts.js       ← גרפים עם Chart.js
+│       ├── css/style.css          ← RTL-aware styling
+│       ├── js/charts.js           ← Chart.js integration
+│       └── makolet_logo.{png,jpg}
 │
 ├── notifications/
 │   ├── __init__.py
-│   └── whatsapp.py            ← שליחת הודעות WhatsApp (Twilio/CallMeBot)
+│   └── whatsapp.py                ← Telegram + WhatsApp (Green API) alerts
 │
-├── scheduler.py               ← מנהל התזמון הלילי (cron)
-└── run_all_agents.py          ← הרצה ידנית של כל הסוכנים
+├── scripts/                       ← Maintenance & backfill utilities
+│   ├── backfill_aviv.py
+│   ├── backfill_bilboy.py
+│   ├── bilboy_verify.py
+│   ├── bilboy_deep_audit.py
+│   ├── load_historical_electricity.py
+│   ├── import_z_pdfs.py
+│   ├── migrate_db.py
+│   ├── debug_electricity_pdf.py
+│   ├── debug_historical_email.py
+│   └── deep_test.py
+│
+└── tests/
+    ├── __init__.py
+    ├── test_base_agent.py
+    ├── test_bilboy.py
+    ├── test_aviv_alerts.py
+    ├── test_electricity.py
+    ├── test_employee_hours.py
+    ├── test_db.py
+    └── test_whatsapp.py
 ```
 
 ---
 
-## Stack טכנולוגי
+## Tech Stack
 
-| רכיב | טכנולוגיה | סיבה |
-|------|-----------|------|
-| Scraping | Playwright (Python) | עובד טוב עם אתרים ישראלים, תומך JS |
-| Backend | Flask | פשוט, Python, מספיק לדשבורד |
-| Database | SQLite | אין צורך בשרת DB נפרד |
-| Frontend | HTML + Chart.js | Python-friendly, ללא build process |
-| תזמון | APScheduler | ספריית Python, ללא צורך ב-cron מערכת |
-| התראות | CallMeBot API | WhatsApp בחינם, ללא Twilio |
-
----
-
-## מקורות נתונים
-
-### 1. אביב קופות (מכירות)
-- **URL:** להשלים
-- **נתון:** סך מכירות יומי / חודשי
-- **תדירות:** כל לילה ב-02:00
-- **credentials:** `.env` → `AVIV_USERNAME`, `AVIV_PASSWORD`
-
-### 2. Bilboy (סחורה)
-- **URL:** https://www.bilboy.co.il
-- **נתון:** סך חשבוניות לחודש
-- **תדירות:** כל לילה ב-02:30
-- **credentials:** `.env` → `BILBOY_USERNAME`, `BILBOY_PASSWORD`
-
-### 3. חברת חשמל ישראל
-- **URL:** https://www.iec.co.il
-- **נתון:** חשבון חודשי אחרון
-- **תדירות:** פעם בחודש ב-1 לחודש
-- **credentials:** `.env` → `ELECTRIC_USERNAME`, `ELECTRIC_PASSWORD`
-
-### 4. עירייה - ארנונה
-- **URL:** להשלים (תלוי עיר)
-- **נתון:** תשלום ארנונה חודשי
-- **תדירות:** פעם ברבעון
-- **credentials:** `.env` → `MUNICIPALITY_USERNAME`, `MUNICIPALITY_PASSWORD`
+| Component | Technology | Notes |
+|-----------|-----------|-------|
+| Data fetching | Gmail IMAP + REST APIs | No browser scraping currently used |
+| PDF parsing | pdfplumber | Z-reports, electricity bills |
+| Backend | Flask + Flask-Login | Role-based auth (admin/viewer) |
+| Database | SQLite (raw sql) | No ORM, parameterized queries, sqlite3.Row |
+| Frontend | HTML + Chart.js | Vanilla JS, RTL layout, no build tools |
+| Scheduling | APScheduler | BlockingScheduler, Asia/Jerusalem timezone |
+| Notifications | Telegram (primary) | WhatsApp via Green API as fallback |
 
 ---
 
-## סכמת DB
+## Data Sources
 
-### טבלה: `daily_sales` (מכירות יומיות)
+### 1. Aviv POS (Daily Sales) — `agents/aviv_alerts.py`
+- **Method:** Gmail IMAP — searches for emails from `AVIV_SENDER_EMAIL` with subject "דוח סוף יום"
+- **Data:** PDF attachment (filename starting with "z_") → extracts total income via pdfplumber
+- **Schedule:** Nightly at 02:00; expected Sun–Fri, Saturday only on month-end
+- **Credentials:** `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`, `AVIV_SENDER_EMAIL`
+
+### 2. BilBoy (Goods/Invoices) — `agents/bilboy.py`
+- **Method:** REST API at `https://app.billboy.co.il:5050/api`
+- **Data:** All document types (deliveries, invoices, credits, returns, receipts)
+- **Auth:** Bearer token with auto-refresh on 401. Token requires initial manual OTP
+- **Schedule:** Nightly at 02:00 + Saturday full-month reconciliation at 02:30
+- **Credentials:** `BILBOY_TOKEN`
+
+### 3. Electricity (IEC Bills) — `agents/electricity.py`
+- **Method:** Gmail IMAP — emails from `noreplys@iec.co.il` with contract number in subject
+- **Data:** Bill amount, billing period, PDF attachment
+- **Features:** Marks multi-month bills as corrections, calculates prorated monthly estimates
+- **Credentials:** `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`
+
+### 4. Employee Hours — `agents/employee_hours.py`
+- **Method:** Gmail IMAP — emails with subject "נוכחות באקסל"
+- **Data:** Hebrew tab-separated CSV with attendance data
+- **Schedule:** Days 1–5 of month only, skipped if already finalized
+- **Features:** Fuzzy name matching between CSV and DB employees
+- **Credentials:** `GMAIL_ADDRESS`, `GMAIL_APP_PASSWORD`
+
+### 5. Municipality (Arnona) — NOT IMPLEMENTED
+- Planned but not yet built
+
+---
+
+## Database Schema (9 tables)
+
+### `daily_sales` — Z-report income
 ```sql
-id, date, total_income, source, created_at
+id, date, total_income, source, pdf_path, created_at
 ```
 
-### טבלה: `expenses` (הוצאות)
+### `expenses` — All expense records
 ```sql
-id, date, category, amount, description, source, created_at
+id, date, category, amount, description, source, created_at,
+-- electricity columns:
+is_correction, pdf_filename, period_start, period_end, billing_days,
+-- bilboy columns:
+ref_number, total_without_vat, doc_type, doc_type_name, paid
 ```
-**קטגוריות:** `goods` | `electricity` | `arnona` | `rent` | `salary` | `vat` | `insurance` | `internet`
+Categories: `goods` | `electricity` | `arnona` | `rent` | `salary` | `vat` | `insurance` | `internet`
 
-### טבלה: `agent_logs` (לוג סוכנים)
+### `employees` — Staff database
+```sql
+id, name, hourly_rate, is_active, shift, created_at, deleted_at
+```
+
+### `employee_hours` — Monthly hours per employee (by ID)
+```sql
+id, employee_id, month, year, hours_worked, is_finalized, created_at
+```
+
+### `employee_monthly_hours` — CSV-uploaded attendance (by name)
+```sql
+id, employee_name, month, total_hours, total_salary, uploaded_at
+-- UNIQUE(employee_name, month)
+```
+
+### `employee_rate_history` — Historical hourly rates
+```sql
+id, employee_id, hourly_rate, effective_from, effective_to, created_at
+```
+
+### `fixed_expenses` — Manual recurring costs
+```sql
+id, category, amount, valid_from, valid_until, notes
+```
+
+### `agent_logs` — Agent execution history
 ```sql
 id, agent_name, run_date, status, records_fetched, error_message, duration_seconds, created_at
 ```
 
-### טבלה: `fixed_expenses` (הוצאות קבועות ידניות)
+### `pending_fetches` — Failed fetch retry tracking
 ```sql
-id, category, amount, valid_from, valid_until, notes
+id, agent, date, reason, attempts, created_at, last_attempt_at, resolved_at
+-- UNIQUE(agent, date)
 ```
-לקטגוריות שאין להן אתר: שכירות, משכורות, ביטוח, אינטרנט, מע"מ
 
 ---
 
-## מחלקת בסיס לסוכנים (base_agent.py)
+## Agent Base Class
 
-כל סוכן **חייב** לרשת מ-`BaseAgent` ולממש:
+All agents inherit from `BaseAgent` (ABC) and must implement:
 ```python
-class BaseAgent:
-    def run(self) -> dict:       # מחזיר {"success": bool, "data": [...], "error": str}
-    def login(self) -> bool      # מתחבר לאתר
-    def fetch_data(self) -> list # מושך את הנתונים
-    def save_to_db(self, data)   # שומר ב-DB
+class MyAgent(BaseAgent):
+    name = "my_agent"                   # unique agent identifier
+    def fetch_data(self) -> list: ...   # fetch from external source
+    def save_to_db(self, data) -> None: ... # persist to database
 ```
 
----
+`BaseAgent.run()` provides:
+- Up to 3 retry attempts with 5-second delays
+- Automatic `agent_logs` recording (success/failure + timing)
+- `pending_fetches` tracking for failed dates (retried on next run)
+- Telegram/WhatsApp alerts on failure, recovery, and exhausted retries
 
-## התראות WhatsApp
-
-שימוש ב-**CallMeBot** (חינמי, ללא Twilio):
-- הגדרה: https://www.callmebot.com/blog/free-api-whatsapp-messages/
-- `.env` → `WHATSAPP_PHONE`, `WHATSAPP_API_KEY`
-
-**מתי נשלחת הודעה:**
-- סוכן נכשל לאחר 3 ניסיונות
-- נתון חריג (למשל חשמל גבוה מהרגיל ב-30%)
-- סיכום לילי (אופציונלי)
+Optional override: `fetch_data_for_date(target_date)` for date-specific fetching.
 
 ---
 
-## משתני סביבה (.env)
+## Scheduler Jobs
+
+| Job | Schedule | Description |
+|-----|----------|-------------|
+| `nightly_job` | Daily 02:00 | Runs bilboy + aviv_alerts always; employee_hours on days 1–5 if not finalized |
+| `saturday_reconciliation` | Saturday 02:30 | Full-month BilBoy delete+re-insert reconciliation |
+
+On startup, `nightly_job` runs once immediately for testing.
+After each nightly run, a Hebrew summary is sent via Telegram.
+
+---
+
+## Notifications
+
+**Primary:** Telegram via Bot API (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
+**Fallback:** WhatsApp via Green API (`GREENAPI_INSTANCE_ID`, `GREENAPI_TOKEN`, `WHATSAPP_PHONE`)
+
+Alerts sent for:
+- Agent failure after 3 retries
+- Pending fetch recovery / exhaustion
+- Missing Z-reports (checked nightly, past 7 days)
+- Nightly summary (always)
+- Saturday reconciliation results
+
+---
+
+## Environment Variables (.env)
 
 ```env
-# אביב קופות
-AVIV_USERNAME=
-AVIV_PASSWORD=
+# Gmail IMAP (used by aviv_alerts, electricity, employee_hours)
+GMAIL_ADDRESS=
+GMAIL_APP_PASSWORD=           # Google App Password (not regular password)
 
-# Bilboy
-BILBOY_USERNAME=
-BILBOY_PASSWORD=
+# Aviv
+AVIV_SENDER_EMAIL=            # Email address that sends Z-reports
 
-# חברת חשמל
-ELECTRIC_USERNAME=
-ELECTRIC_PASSWORD=
+# BilBoy API
+BILBOY_TOKEN=                 # Bearer token (manual OTP setup, auto-refresh)
 
-# עירייה
-MUNICIPALITY_USERNAME=
-MUNICIPALITY_PASSWORD=
+# Telegram (primary notifications)
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
 
-# WhatsApp התראות
+# WhatsApp / Green API (fallback)
 WHATSAPP_PHONE=972XXXXXXXXX
-WHATSAPP_API_KEY=
+GREENAPI_INSTANCE_ID=
+GREENAPI_API_URL=
+GREENAPI_TOKEN=
 
-# כללי
+# Flask
 FLASK_SECRET_KEY=
-DASHBOARD_PORT=5000
+DASHBOARD_PORT=8080
 ```
 
 ---
 
-## סדר פיתוח מומלץ
-
-1. **[שלב 1]** `database/` - DB + models
-2. **[שלב 2]** `agents/base_agent.py` - מחלקת בסיס
-3. **[שלב 3]** `agents/bilboy.py` - סוכן ראשון (הכי חשוב)
-4. **[שלב 4]** `agents/aviv_pos.py` - סוכן קופה
-5. **[שלב 5]** `dashboard/` - דשבורד Flask
-6. **[שלב 6]** `notifications/whatsapp.py` - התראות
-7. **[שלב 7]** `scheduler.py` - תזמון לילי
-8. **[שלב 8]** `agents/electricity.py` + `agents/municipality.py`
-9. **[שלב 9]** Deploy לVPS
-
----
-
-## הנחיות לסוכנים (חשוב!)
-
-- **תמיד** השתמש ב-`playwright` עם `headless=True` בפרודקשן
-- **תמיד** המתן לטעינת אלמנטים עם `wait_for_selector` - לא `sleep`
-- **תמיד** תפוס exceptions ודווח ל-`agent_logs`
-- **תמיד** נסה שוב 3 פעמים לפני כישלון סופי
-- **אל תשמור** credentials בקוד - רק מ-`.env`
-- **אל תשמור** screenshots אלא אם יש שגיאה (לצורך debug)
-
----
-
-## הרצת הפרויקט
+## Running the Project
 
 ```bash
-# התקנת dependencies
+# Install dependencies
 pip install -r requirements.txt
-playwright install chromium
 
-# הגדרת סביבה
-cp .env.example .env
-# ערוך את .env עם הפרטים האמיתיים
+# Configure environment
+cp .env.example .env   # edit with real credentials
 
-# הרצת הדשבורד
-python dashboard/app.py
+# Run the dashboard
+python run.py
 
-# הרצה ידנית של כל הסוכנים
-python run_all_agents.py
-
-# הפעלת scheduler (ירוץ כל הזמן)
+# Run the scheduler (blocks, runs agents nightly)
 python scheduler.py
 ```
 
 ---
 
-## VPS Deployment
+## Running Tests
 
-- **OS:** Ubuntu 22.04
-- **הרצה רציפה:** systemd service או `screen`
-- **לוגים:** `/var/log/makolet/`
-- **גיבוי DB:** cron job יומי ל-backup של `makolet.db`
+```bash
+python -m pytest tests/
+```
+
+Tests cover all agents, database CRUD, base agent retry logic, and notification routing.
+
+---
+
+## Development Guidelines
+
+- **Agent pattern:** Always inherit from `BaseAgent`, implement `fetch_data()` and `save_to_db()`
+- **Database:** Use `get_connection()` context manager, parameterized queries only, no ORM
+- **Migrations:** Add new columns via `ALTER TABLE` with try/except in `models.py` (idempotent)
+- **Credentials:** Never hardcode — always from `.env` via `os.getenv()`
+- **Error handling:** Agents should raise exceptions; `BaseAgent.run()` handles retries and logging
+- **Frontend:** RTL layout (Hebrew), vanilla JS + Chart.js, no build process
+- **Dates:** Store as ISO format `YYYY-MM-DD` in DB, display as `DD/MM/YYYY` in UI
+- **Language:** Code in English, UI and notifications in Hebrew
+
+---
+
+## Not Yet Implemented
+
+- `agents/municipality.py` — Arnona (property tax) agent
+- CI/CD pipeline
+- Docker / deployment automation
+- `.env.example` template file

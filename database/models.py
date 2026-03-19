@@ -156,6 +156,7 @@ def _migrate_expenses_columns(conn):
     _cleanup_duplicate_electricity(conn)
     _migrate_daily_sales_columns(conn)
     _migrate_employees_columns(conn)
+    _migrate_fixed_expenses_columns(conn)
 
 
 def _migrate_daily_sales_columns(conn):
@@ -165,6 +166,19 @@ def _migrate_daily_sales_columns(conn):
         conn.commit()
     except Exception:
         pass  # Column already exists
+
+
+def _migrate_fixed_expenses_columns(conn):
+    """Add percent_of and percent_value columns to fixed_expenses if they don't exist yet."""
+    for col, definition in [
+        ("percent_of", "TEXT DEFAULT NULL"),
+        ("percent_value", "REAL DEFAULT NULL"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE fixed_expenses ADD COLUMN {col} {definition}")
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
 
 
 def _migrate_employees_columns(conn):

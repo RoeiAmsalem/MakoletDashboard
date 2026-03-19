@@ -47,6 +47,7 @@ from dotenv import load_dotenv
 
 from database.db import (
     calculate_estimated_profit,
+    compute_percent_base,
     delete_employee,
     delete_fixed_expense,
     get_active_employees,
@@ -58,12 +59,15 @@ from database.db import (
     get_electricity_monthly_estimate,
     get_employee_hours,
     get_employee_monthly_hours,
+    get_total_income,
     get_total_monthly_salary,
     init_db,
     insert_employee,
     insert_fixed_expense,
+    insert_fixed_expense_full,
     toggle_employee_active,
     update_employee_rate,
+    update_fixed_expense,
     update_fixed_expense_amount,
     upsert_employee_hours,
     upsert_employee_monthly_hours,
@@ -373,7 +377,18 @@ def index():
 @app.route("/fixed-expenses")
 @login_required
 def fixed_expenses():
-    return render_template("fixed_expenses.html", **_month_context())
+    ctx = _month_context()
+    selected_month = ctx["selected_month"]
+    year = int(selected_month[:4])
+    month = int(selected_month[5:7])
+    from database.db import get_total_expenses_by_category
+    month_income = get_total_income(month, year)
+    cats = get_total_expenses_by_category(month, year)
+    month_goods = cats.get("goods", 0)
+    return render_template("fixed_expenses.html",
+                           month_income=month_income,
+                           month_goods=month_goods,
+                           **ctx)
 
 
 @app.route("/employees")
@@ -482,30 +497,58 @@ def api_summary():
 @app.route("/api/fixed-expenses", methods=["GET"])
 @login_required
 def api_fixed_expenses_list():
+    selected = _parse_month_param()
+    month_str = selected.strftime("%Y-%m")
     rows = get_all_fixed_expenses()
-    return jsonify([dict(r) for r in rows])
+    result = []
+    for r in rows:
+        d = dict(r)
+        if d.get("percent_of") and d.get("percent_value"):
+            base = compute_percent_base(month_str, d["percent_of"])
+            d["display_amount"] = round(base * d["percent_value"] / 100, 2)
+            d["base_value"] = round(base, 2)
+        else:
+            d["display_amount"] = d["amount"]
+            d["base_value"] = None
+        result.append(d)
+    return jsonify(result)
 
 
 @app.route("/api/fixed-expenses", methods=["POST"])
 @login_required
 def api_fixed_expenses_create():
-    body     = request.get_json(force=True)
-    category = (body.get("category") or "").strip()
-    amount   = body.get("amount", 0)
+    body          = request.get_json(force=True)
+    category      = (body.get("category") or "").strip()
+    amount        = body.get("amount", 0)
+    percent_of    = (body.get("percent_of") or "").strip() or None
+    percent_value = body.get("percent_value")
     if not category:
         return jsonify({"error": "category required"}), 400
-    new_id = insert_fixed_expense(category, float(amount))
+    new_id = insert_fixed_expense_full(
+        category, float(amount),
+        percent_of=percent_of,
+        percent_value=float(percent_value) if percent_value else None,
+    )
     return jsonify({"ok": True, "id": new_id}), 201
 
 
 @app.route("/api/fixed-expenses/<int:expense_id>", methods=["PUT"])
 @login_required
 def api_fixed_expenses_update(expense_id: int):
-    body = request.get_json(force=True)
-    amount = body.get("amount")
+    body          = request.get_json(force=True)
+    amount        = body.get("amount")
+    percent_of    = body.get("percent_of")
+    percent_value = body.get("percent_value")
+
+    if percent_of and percent_value:
+        update_fixed_expense(expense_id, amount=0,
+                             percent_of=percent_of,
+                             percent_value=float(percent_value))
+        return jsonify({"ok": True, "id": expense_id})
+
     if amount is None or not isinstance(amount, (int, float)):
         return jsonify({"error": "amount required"}), 400
-    update_fixed_expense_amount(expense_id, float(amount))
+    update_fixed_expense(expense_id, amount=float(amount))
     return jsonify({"ok": True, "id": expense_id, "amount": float(amount)})
 
 

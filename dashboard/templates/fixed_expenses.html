@@ -177,6 +177,39 @@
         }
         .btn-history:hover { background: rgba(251,191,36,0.24); }
 
+        /* ── Type toggle buttons ── */
+        .type-toggle { display: flex; gap: 6px; margin-bottom: 8px; }
+        .type-btn {
+            font-size: 0.8rem; font-weight: 700; padding: 0.35rem 0.75rem;
+            border-radius: 6px; cursor: pointer; font-family: inherit;
+            background: rgba(255,255,255,0.05); border: 1px solid #334155;
+            color: var(--text-secondary); transition: all 0.15s;
+        }
+        .type-btn.active {
+            background: rgba(129,140,248,0.2); border-color: rgba(129,140,248,0.5);
+            color: #c7d2fe;
+        }
+        .type-btn:hover { background: rgba(129,140,248,0.12); }
+
+        .percent-fields { display: none; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
+        .percent-fields.open { display: flex; }
+
+        .percent-preview {
+            font-size: 0.82rem; color: #86efac; padding: 0.4rem 0;
+            min-height: 1.5em;
+        }
+
+        /* ── Percent badge in table ── */
+        .pct-badge {
+            display: inline-block; font-size: 0.65rem; font-weight: 700;
+            background: rgba(251,191,36,0.18); color: #fbbf24;
+            border-radius: 4px; padding: 1px 5px; margin-inline-start: 6px;
+            vertical-align: middle;
+        }
+        .pct-amount-detail {
+            font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px;
+        }
+
         /* ── tfoot ── */
         tfoot td {
             font-weight: 700;
@@ -273,13 +306,39 @@
 
         <!-- Inline add form -->
         <div class="add-panel" id="add-panel">
+            <div style="width:100%">
+                <div class="type-toggle">
+                    <button type="button" id="type-fixed" class="type-btn active" onclick="setExpenseType('fixed')">₪ סכום קבוע</button>
+                    <button type="button" id="type-percent" class="type-btn" onclick="setExpenseType('percent')">% אחוז</button>
+                </div>
+            </div>
             <div class="field">
                 <label for="new-category">שם ההוצאה</label>
                 <input id="new-category" type="text" placeholder='למשל: ביטוח רכב' maxlength="80">
             </div>
-            <div class="field">
+            <!-- Fixed amount field -->
+            <div class="field" id="fixed-amount-field">
                 <label for="new-amount">סכום חודשי (₪)</label>
                 <input id="new-amount" type="number" min="0" step="0.01" placeholder="0.00" style="direction:ltr">
+            </div>
+            <!-- Percent fields -->
+            <div class="percent-fields" id="percent-fields">
+                <div class="field" style="min-width:90px; flex:0.5">
+                    <label for="new-percent-value">אחוז %</label>
+                    <input id="new-percent-value" type="number" min="0" step="0.1" placeholder="5" style="direction:ltr" oninput="updatePreview()">
+                </div>
+                <div class="field" style="min-width:130px; flex:0.7">
+                    <label for="new-percent-of">בסיס החישוב</label>
+                    <select id="new-percent-of" style="background:var(--bg); border:1px solid #818cf8; border-radius:6px; padding:0.45rem 0.65rem; color:var(--text-primary); font-size:0.9rem; font-family:inherit;" onchange="updatePreview()">
+                        <option value="income">הכנסות</option>
+                        <option value="goods">סחורה</option>
+                        <option value="profit">רווח גולמי</option>
+                    </select>
+                </div>
+                <div class="field" style="min-width:140px; flex:0.6">
+                    <label>&nbsp;</label>
+                    <div class="percent-preview" id="percent-preview"></div>
+                </div>
             </div>
             <div class="panel-actions">
                 <button class="btn-save-inline" onclick="saveNewExpense()">✓ שמור</button>
@@ -315,6 +374,10 @@
 'use strict';
 
 const SELECTED_MONTH = {{ selected_month | tojson }};
+const MONTH_INCOME = {{ month_income | tojson }};
+const MONTH_GOODS  = {{ month_goods | tojson }};
+
+const BASE_LABELS = { income: 'הכנסות', goods: 'סחורה', profit: 'רווח גולמי' };
 
 const CATEGORY_HE = {
     rent: 'שכירות', arnona: 'ארנונה', electricity: 'חשמל',
@@ -325,6 +388,37 @@ function catLabel(cat) { return CATEGORY_HE[cat] || cat; }
 
 let allExpenses = [];
 let elecEstimate = null;
+let expenseType = 'fixed';  // 'fixed' or 'percent'
+
+function getBaseValue(base) {
+    if (base === 'income') return MONTH_INCOME;
+    if (base === 'goods')  return MONTH_GOODS;
+    if (base === 'profit') return MONTH_INCOME - MONTH_GOODS;
+    return 0;
+}
+
+// ── Type toggle ───────────────────────────────────────────────
+function setExpenseType(type) {
+    expenseType = type;
+    document.getElementById('type-fixed').classList.toggle('active', type === 'fixed');
+    document.getElementById('type-percent').classList.toggle('active', type === 'percent');
+    document.getElementById('fixed-amount-field').style.display = type === 'fixed' ? '' : 'none';
+    document.getElementById('percent-fields').classList.toggle('open', type === 'percent');
+    if (type === 'percent') updatePreview();
+}
+
+function updatePreview() {
+    const pct  = parseFloat(document.getElementById('new-percent-value').value) || 0;
+    const base = document.getElementById('new-percent-of').value;
+    const baseVal = getBaseValue(base);
+    const computed = baseVal * pct / 100;
+    const el = document.getElementById('percent-preview');
+    if (pct > 0) {
+        el.textContent = `≈ ${formatMoney(computed)} החודש`;
+    } else {
+        el.textContent = '';
+    }
+}
 
 // ── Load ───────────────────────────────────────────────────────
 async function loadExpenses() {
@@ -332,7 +426,7 @@ async function loadExpenses() {
     const tbody = document.getElementById('expenses-tbody');
     try {
         const [fixedRes, elecRes] = await Promise.all([
-            fetch('/api/fixed-expenses'),
+            fetch(`/api/fixed-expenses?month=${SELECTED_MONTH}`),
             fetch('/api/electricity/estimate'),
         ]);
         if (!fixedRes.ok) throw new Error(`HTTP ${fixedRes.status}`);
@@ -351,7 +445,7 @@ async function loadExpenses() {
 }
 
 function renderKpi(section, expenses) {
-    const total = expenses.reduce((s, e) => s + e.amount, 0);
+    const total = expenses.reduce((s, e) => s + (e.display_amount || e.amount), 0);
     section.innerHTML = `
         <div class="kpi-card kpi-card--fixed">
             <div class="kpi-header">
@@ -380,21 +474,31 @@ function renderTable(tbody, expenses) {
         updateTotals(expenses);
         return;
     }
-    tbody.innerHTML = elecRow + expenses.map(e => `
+    tbody.innerHTML = elecRow + expenses.map(e => {
+        const isPct = e.percent_of && e.percent_value;
+        const displayAmt = e.display_amount || e.amount;
+        const amountHtml = isPct
+            ? `<span>${formatMoney(displayAmt)}</span><div class="pct-amount-detail">${e.percent_value}% מ${BASE_LABELS[e.percent_of] || e.percent_of}</div>`
+            : `<span id="display-${e.id}">${formatMoney(displayAmt)}</span>`;
+        const catHtml = isPct
+            ? `${catLabel(e.category)}<span class="pct-badge">%</span>`
+            : catLabel(e.category);
+        const editInput = isPct ? '' : `<input class="amount-input" id="input-${e.id}" type="number" min="0" step="0.01" value="${e.amount}" style="display:none">`;
+        const editBtn = isPct ? '' : `<button class="btn-icon" onclick="startEdit(${e.id})" id="btn-edit-${e.id}" title="ערוך">✏️</button>
+                    <button class="btn-save-inline" onclick="saveEdit(${e.id})" id="btn-save-${e.id}" style="display:none">✓ שמור</button>
+                    <button class="btn-cancel-inline" onclick="cancelEdit(${e.id})" id="btn-cancel-${e.id}" style="display:none">✗</button>`;
+        return `
         <tr id="row-${e.id}">
-            <td>${catLabel(e.category)}</td>
+            <td>${catHtml}</td>
             <td class="money fixed" id="amount-cell-${e.id}">
-                <span id="display-${e.id}">${formatMoney(e.amount)}</span>
-                <input class="amount-input" id="input-${e.id}" type="number"
-                    min="0" step="0.01" value="${e.amount}" style="display:none">
+                ${amountHtml}
+                ${editInput}
             </td>
             <td style="color:var(--text-secondary);font-size:0.85rem">${e.valid_from || ''}</td>
             <td style="color:var(--text-secondary);font-size:0.85rem">${e.notes || ''}</td>
             <td>
                 <div class="actions-cell" id="actions-${e.id}">
-                    <button class="btn-icon" onclick="startEdit(${e.id})" id="btn-edit-${e.id}" title="ערוך">✏️</button>
-                    <button class="btn-save-inline" onclick="saveEdit(${e.id})" id="btn-save-${e.id}" style="display:none">✓ שמור</button>
-                    <button class="btn-cancel-inline" onclick="cancelEdit(${e.id})" id="btn-cancel-${e.id}" style="display:none">✗</button>
+                    ${editBtn}
                     <button onclick="deleteExpense(${e.id})" title="מחק"
                             style="background:none; border:none; cursor:pointer; padding:4px 6px;
                                    color:#ef4444; border-radius:4px; transition:background 0.2s;"
@@ -413,12 +517,13 @@ function renderTable(tbody, expenses) {
                     <span class="saved-flash" id="flash-${e.id}">נשמר ✓</span>
                 </div>
             </td>
-        </tr>`).join('');
+        </tr>`;
+    }).join('');
     updateTotals(expenses);
 }
 
 function updateTotals(expenses) {
-    const fixedTotal = expenses.reduce((s, e) => s + e.amount, 0);
+    const fixedTotal = expenses.reduce((s, e) => s + (e.display_amount || e.amount), 0);
     const elecPart   = elecEstimate !== null ? elecEstimate : 0;
     const total      = fixedTotal + elecPart;
     document.getElementById('expenses-tfoot').innerHTML = `
@@ -428,7 +533,6 @@ function updateTotals(expenses) {
             <td colspan="3"></td>
         </tr>`;
     document.getElementById('header-total').textContent = `סה"כ: ${formatMoney(total)}`;
-    // refresh KPI too
     const kpi = document.getElementById('kpi-section');
     if (kpi) renderKpi(kpi, expenses);
 }
@@ -439,33 +543,48 @@ function toggleAddPanel() {
     panel.classList.toggle('open');
     if (panel.classList.contains('open')) {
         document.getElementById('new-category').focus();
+    } else {
+        // Reset to fixed type when closing
+        setExpenseType('fixed');
     }
 }
 
 async function saveNewExpense() {
     const catInput    = document.getElementById('new-category');
-    const amountInput = document.getElementById('new-amount');
     const category    = catInput.value.trim();
-    const amount      = parseFloat(amountInput.value) || 0;
-
     if (!category) { catInput.focus(); return; }
+
+    let body = { category };
+
+    if (expenseType === 'percent') {
+        const pctVal = parseFloat(document.getElementById('new-percent-value').value) || 0;
+        const pctOf  = document.getElementById('new-percent-of').value;
+        if (pctVal <= 0) { document.getElementById('new-percent-value').focus(); return; }
+        body.amount = 0;
+        body.percent_of = pctOf;
+        body.percent_value = pctVal;
+    } else {
+        const amountInput = document.getElementById('new-amount');
+        body.amount = parseFloat(amountInput.value) || 0;
+    }
 
     try {
         const res = await fetch('/api/fixed-expenses', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ category, amount }),
+            body:    JSON.stringify(body),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const { id } = await res.json();
 
-        // Add to local state and re-render
-        allExpenses.push({ id, category, amount, valid_from: new Date().toISOString().slice(0,10), notes: '' });
-        renderTable(document.getElementById('expenses-tbody'), allExpenses);
+        // Reload from server to get computed display_amount
+        await loadExpenses();
 
-        // Reset and close form
-        catInput.value    = '';
-        amountInput.value = '';
+        // Reset form
+        catInput.value = '';
+        document.getElementById('new-amount').value = '';
+        document.getElementById('new-percent-value').value = '';
+        document.getElementById('percent-preview').textContent = '';
+        setExpenseType('fixed');
         document.getElementById('add-panel').classList.remove('open');
     } catch (err) {
         console.error(err);
@@ -524,6 +643,7 @@ async function saveEdit(id) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const exp = allExpenses.find(e => e.id === id);
         exp.amount = amount;
+        exp.display_amount = amount;
         document.getElementById(`display-${id}`).textContent = formatMoney(amount);
         cancelEdit(id);
         updateTotals(allExpenses);

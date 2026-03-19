@@ -425,6 +425,64 @@ def insert_fixed_expense(category: str, amount: float) -> int:
     )
 
 
+def update_fixed_expense(expense_id: int, category: str = None, amount: float = None,
+                         percent_of: str = None, percent_value: float = None) -> None:
+    """Update a fixed expense row. Supports both fixed-amount and percent-based."""
+    with get_connection() as conn:
+        if percent_of and percent_value and percent_value > 0:
+            conn.execute(
+                "UPDATE fixed_expenses SET amount = 0, percent_of = ?, percent_value = ? WHERE id = ?",
+                (percent_of, percent_value, expense_id),
+            )
+        else:
+            if amount is not None:
+                conn.execute(
+                    "UPDATE fixed_expenses SET amount = ?, percent_of = NULL, percent_value = NULL WHERE id = ?",
+                    (amount, expense_id),
+                )
+        if category is not None:
+            conn.execute("UPDATE fixed_expenses SET category = ? WHERE id = ?", (category, expense_id))
+
+
+def insert_fixed_expense_full(category: str, amount: float,
+                               percent_of: str = None, percent_value: float = None) -> int:
+    """Insert a fixed expense, optionally percent-based. Returns new row id."""
+    today = date.today().isoformat()
+    if percent_of and percent_value and percent_value > 0:
+        amount = 0
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO fixed_expenses (category, amount, valid_from, percent_of, percent_value) VALUES (?, ?, ?, ?, ?)",
+            (category, amount, today, percent_of, percent_value),
+        )
+        return cur.lastrowid
+
+
+def compute_percent_base(month_str: str, percent_of: str) -> float:
+    """Compute the base value for a percent-based expense.
+    percent_of: 'income', 'goods', or 'profit'."""
+    year = int(month_str[:4])
+    month = int(month_str[5:7])
+    if percent_of == 'income':
+        return get_total_income(month, year)
+    elif percent_of == 'goods':
+        cats = get_total_expenses_by_category(month, year)
+        return cats.get('goods', 0)
+    elif percent_of == 'profit':
+        income = get_total_income(month, year)
+        cats = get_total_expenses_by_category(month, year)
+        goods = cats.get('goods', 0)
+        # Get non-percent fixed expenses total
+        with get_connection() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(amount), 0) AS total FROM fixed_expenses "
+                "WHERE percent_of IS NULL"
+            ).fetchone()
+            fixed = row['total']
+        return income - goods - fixed
+    return 0
+
+
 def delete_fixed_expense(expense_id: int) -> None:
     with get_connection() as conn:
         conn.execute("DELETE FROM fixed_expenses WHERE id = ?", (expense_id,))
@@ -599,6 +657,20 @@ def increment_pending_attempt(agent: str, date_str: str) -> None:
 # Profit calculation helper
 # ---------------------------------------------------------------------------
 
+def _compute_percent_expenses_total(month_str: str) -> float:
+    """Sum computed amounts for all percent-based fixed expenses."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT percent_of, percent_value FROM fixed_expenses "
+            "WHERE percent_of IS NOT NULL AND percent_value IS NOT NULL AND percent_value > 0"
+        ).fetchall()
+    total = 0
+    for row in rows:
+        base = compute_percent_base(month_str, row["percent_of"])
+        total += base * row["percent_value"] / 100
+    return round(total, 2)
+
+
 def calculate_estimated_profit(month: int, year: int) -> dict:
     """
     Return a dict with all components + estimated profit for the given month.
@@ -626,6 +698,10 @@ def calculate_estimated_profit(month: int, year: int) -> dict:
     electricity = elec_data["estimate"] if elec_data else 0
 
     fixed_total = get_total_fixed_expenses()
+    # Add percent-based fixed expenses (computed dynamically)
+    month_str = f"{year:04d}-{month:02d}"
+    percent_expenses_total = _compute_percent_expenses_total(month_str)
+    fixed_total += percent_expenses_total
     fixed_prorated = fixed_total * ratio + electricity
 
     salary = get_total_salary_cost(month, year)

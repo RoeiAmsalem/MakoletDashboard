@@ -517,9 +517,29 @@
 
         <!-- One-time date picker (only visible when חד פעמי) -->
         <div class="form-row fields-onetime-date" id="fields-onetime-date">
-            <div class="form-field" style="max-width:220px">
-                <label for="new-payment-date">חודש תשלום</label>
-                <input id="new-payment-date" type="month" style="direction:ltr" value="{{ selected_month }}">
+            <div class="form-field" style="max-width:320px">
+                <label>חודש תשלום</label>
+                <div style="display:flex; gap:8px; align-items:center; direction:rtl;">
+                    <select id="payment-month-select" style="flex:1; padding:10px 12px; border-radius:8px;
+                        background:#1e2a3a; border:1px solid #3a4a5c; color:white; font-size:1rem; cursor:pointer;">
+                        <option value="01">ינואר</option>
+                        <option value="02">פברואר</option>
+                        <option value="03">מרץ</option>
+                        <option value="04">אפריל</option>
+                        <option value="05">מאי</option>
+                        <option value="06">יוני</option>
+                        <option value="07">יולי</option>
+                        <option value="08">אוגוסט</option>
+                        <option value="09">ספטמבר</option>
+                        <option value="10">אוקטובר</option>
+                        <option value="11">נובמבר</option>
+                        <option value="12">דצמבר</option>
+                    </select>
+                    <select id="payment-year-select" style="width:100px; padding:10px 12px; border-radius:8px;
+                        background:#1e2a3a; border:1px solid #3a4a5c; color:white; font-size:1rem; cursor:pointer;">
+                    </select>
+                </div>
+                <input type="hidden" id="new-payment-date">
             </div>
         </div>
 
@@ -609,6 +629,34 @@ function setWhenType(type) {
     document.getElementById('when-onetime').className = 'type-btn' + (type === 'onetime' ? ' active-onetime' : '');
     document.getElementById('fields-onetime-date').classList.toggle('open', type === 'onetime');
 }
+
+// ── Payment month/year dropdowns ─────────────────────────────
+(function initPaymentDropdowns() {
+    const yearSel  = document.getElementById('payment-year-select');
+    const monthSel = document.getElementById('payment-month-select');
+    const hidden   = document.getElementById('new-payment-date');
+    const [selY, selM] = SELECTED_MONTH.split('-');
+    const curYear = parseInt(selY);
+
+    // Populate years: current ± 2
+    for (let y = curYear - 2; y <= curYear + 2; y++) {
+        const opt = document.createElement('option');
+        opt.value = String(y);
+        opt.textContent = String(y);
+        if (y === curYear) opt.selected = true;
+        yearSel.appendChild(opt);
+    }
+
+    // Default month to selected month
+    monthSel.value = selM;
+
+    function syncHidden() {
+        hidden.value = yearSel.value + '-' + monthSel.value;
+    }
+    monthSel.addEventListener('change', syncHidden);
+    yearSel.addEventListener('change', syncHidden);
+    syncHidden();
+})();
 
 function updatePreview() {
     const pct  = parseFloat(document.getElementById('new-percent-value').value) || 0;

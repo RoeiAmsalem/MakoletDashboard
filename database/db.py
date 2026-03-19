@@ -700,23 +700,25 @@ def calculate_estimated_profit(month: int, year: int) -> dict:
     electricity = elec_data["estimate"] if elec_data else 0
 
     month_str = f"{year:04d}-{month:02d}"
-    # Sum recurring fixed expenses (exclude one-time and percent-based)
+    # Compute fixed total using same logic as GET /api/fixed-expenses:
+    # iterate all rows, filter one-time by month, compute % dynamically
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT COALESCE(SUM(amount), 0) AS total FROM fixed_expenses "
-            "WHERE (is_recurring = 1 OR is_recurring IS NULL) AND percent_of IS NULL",
-        ).fetchone()
-        fixed_total = row["total"]
-        # Add one-time expenses for this specific month
-        row2 = conn.execute(
-            "SELECT COALESCE(SUM(amount), 0) AS total FROM fixed_expenses "
-            "WHERE is_recurring = 0 AND payment_date LIKE ?",
-            (month_str + "%",),
-        ).fetchone()
-        fixed_total += row2["total"]
-    # Add percent-based fixed expenses (computed dynamically)
-    percent_expenses_total = _compute_percent_expenses_total(month_str)
-    fixed_total += percent_expenses_total
+        all_fixed = conn.execute("SELECT * FROM fixed_expenses").fetchall()
+    fixed_total = 0
+    for fe in all_fixed:
+        d = dict(fe)
+        is_rec = d.get("is_recurring", 1)
+        # Skip one-time expenses not in this month
+        if is_rec is not None and int(is_rec) == 0:
+            pd = d.get("payment_date") or ""
+            if not pd.startswith(month_str):
+                continue
+        # Compute display_amount
+        if d.get("percent_of") and d.get("percent_value"):
+            base = compute_percent_base(month_str, d["percent_of"])
+            fixed_total += round(base * d["percent_value"] / 100, 2)
+        else:
+            fixed_total += d.get("amount", 0)
     fixed_prorated = fixed_total * ratio + electricity
 
     salary = get_total_salary_cost(month, year)

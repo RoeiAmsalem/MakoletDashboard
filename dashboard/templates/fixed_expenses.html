@@ -8,6 +8,12 @@
     <style>
         .page-accent { color: #818cf8; }
 
+        /* ── KPI override — bigger ── */
+        .kpi-card--fixed .kpi-value { font-size: 2.2rem !important; }
+        .kpi-card--fixed { padding: 1.5rem 2rem !important; }
+        .kpi-card--fixed .kpi-label { font-size: 1.05rem !important; }
+
+        /* ── Table card ── */
         .table-card {
             background: var(--card);
             border: 1px solid var(--card-border);
@@ -25,7 +31,7 @@
         }
 
         .table-header h2 {
-            font-size: 1rem;
+            font-size: 1.15rem;
             font-weight: 600;
             color: var(--text-primary);
             display: flex;
@@ -33,58 +39,191 @@
             gap: 0.5rem;
         }
 
-        .data-table thead th { background: #162032; }
-
-        /* ── Add form panel ── */
-        .add-panel {
+        .data-table thead th {
             background: #162032;
-            border-bottom: 1px solid var(--card-border);
-            padding: 1rem 1.5rem;
+            font-size: 0.95rem;
+            padding: 14px 16px;
+        }
+
+        .data-table tbody td {
+            font-size: 1rem;
+            padding: 14px 16px;
+            vertical-align: middle;
+        }
+
+        /* ── Add form card ── */
+        .add-form-card {
+            background: linear-gradient(135deg, #162032 0%, #1a1d35 100%);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 1.5rem 1.75rem;
+            margin-bottom: 1.25rem;
             display: none;
-            gap: 0.75rem;
-            align-items: flex-end;
+        }
+        .add-form-card.open { display: block; }
+
+        .add-form-card h3 {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0 0 1.25rem 0;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .form-row {
+            display: flex;
+            gap: 1rem;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .form-field {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            flex: 1;
+            min-width: 180px;
+        }
+
+        .form-field label {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .form-field input,
+        .form-field select {
+            background: var(--bg);
+            border: 1px solid #475569;
+            border-radius: 8px;
+            padding: 0.6rem 0.85rem;
+            color: var(--text-primary);
+            font-size: 1rem;
+            font-family: inherit;
+            transition: border-color 0.15s;
+        }
+
+        .form-field input:focus,
+        .form-field select:focus {
+            outline: none;
+            border-color: #818cf8;
+            box-shadow: 0 0 0 2px rgba(129,140,248,0.15);
+        }
+
+        /* ── Type toggle — big buttons ── */
+        .type-toggle-section { margin-bottom: 1.25rem; }
+        .type-toggle-section > label {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .type-toggle {
+            display: flex;
+            gap: 8px;
             flex-wrap: wrap;
         }
 
-        .add-panel.open { display: flex; }
-
-        .add-panel .field {
-            display: flex;
-            flex-direction: column;
-            gap: 0.3rem;
-            flex: 1;
-            min-width: 140px;
-        }
-
-        .add-panel label {
-            font-size: 0.75rem;
-            font-weight: 600;
+        .type-btn {
+            font-size: 1rem;
+            font-weight: 700;
+            padding: 0.65rem 1.25rem;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: inherit;
+            background: rgba(255,255,255,0.04);
+            border: 2px solid #334155;
             color: var(--text-secondary);
-            text-transform: uppercase;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
         }
 
-        .add-panel input {
-            background: var(--bg);
-            border: 1px solid #818cf8;
-            border-radius: 6px;
-            padding: 0.45rem 0.65rem;
-            color: var(--text-primary);
-            font-size: 0.9rem;
+        .type-btn.active-monthly {
+            background: rgba(96,165,250,0.15);
+            border-color: rgba(96,165,250,0.5);
+            color: #93c5fd;
+        }
+        .type-btn.active-onetime {
+            background: rgba(251,146,60,0.15);
+            border-color: rgba(251,146,60,0.5);
+            color: #fdba74;
+        }
+        .type-btn.active-percent {
+            background: rgba(251,191,36,0.15);
+            border-color: rgba(251,191,36,0.5);
+            color: #fcd34d;
+        }
+
+        .type-btn:hover { background: rgba(255,255,255,0.08); }
+
+        /* ── Conditional field sections ── */
+        .fields-monthly,
+        .fields-onetime,
+        .fields-percent {
+            display: none;
+        }
+        .fields-monthly.open,
+        .fields-onetime.open,
+        .fields-percent.open {
+            display: flex;
+        }
+
+        .percent-preview {
+            font-size: 1rem;
+            color: #86efac;
+            font-weight: 600;
+            padding: 0.6rem 0;
+            min-height: 1.5em;
+        }
+
+        /* ── Form actions ── */
+        .form-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .btn-save-form {
+            font-size: 1rem;
+            font-weight: 700;
+            padding: 0.6rem 1.5rem;
+            background: rgba(129,140,248,0.2);
+            border: 1px solid rgba(129,140,248,0.5);
+            border-radius: 8px;
+            color: #c7d2fe;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s;
+        }
+        .btn-save-form:hover { background: rgba(129,140,248,0.35); }
+
+        .btn-cancel-form {
+            font-size: 1rem;
+            padding: 0.6rem 1.25rem;
+            background: none;
+            border: 1px solid #475569;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
             font-family: inherit;
         }
+        .btn-cancel-form:hover { background: rgba(255,255,255,0.04); }
 
-        .add-panel input:focus { outline: none; border-color: #a5b4fc; }
-
-        .add-panel .panel-actions { display: flex; gap: 0.5rem; padding-bottom: 0.05rem; }
-
-        /* ── Buttons ── */
+        /* ── Main add button ── */
         .btn-add-main {
-            font-size: 0.82rem;
+            font-size: 1rem;
             font-weight: 700;
-            padding: 0.4rem 0.85rem;
+            padding: 0.55rem 1.1rem;
             background: rgba(129,140,248,0.15);
             border: 1px solid rgba(129,140,248,0.45);
-            border-radius: 6px;
+            border-radius: 8px;
             color: #c7d2fe;
             cursor: pointer;
             font-family: inherit;
@@ -93,37 +232,72 @@
         }
         .btn-add-main:hover { background: rgba(129,140,248,0.28); }
 
+        /* ── Type badges in table ── */
+        .type-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            border-radius: 5px;
+            padding: 2px 8px;
+            white-space: nowrap;
+        }
+        .type-badge--monthly {
+            background: rgba(96,165,250,0.15);
+            color: #93c5fd;
+        }
+        .type-badge--onetime {
+            background: rgba(251,146,60,0.15);
+            color: #fdba74;
+        }
+        .type-badge--percent {
+            background: rgba(251,191,36,0.15);
+            color: #fcd34d;
+        }
+
+        .pct-amount-detail {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* ── Action buttons (bigger tap targets) ── */
+        .actions-cell {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            white-space: nowrap;
+        }
+
         .btn-icon {
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 1rem;
-            padding: 0.25rem 0.4rem;
-            border-radius: 4px;
+            font-size: 1.15rem;
+            padding: 0.4rem 0.5rem;
+            border-radius: 6px;
             transition: background 0.15s;
             color: var(--text-secondary);
         }
         .btn-icon:hover { background: rgba(255,255,255,0.06); }
 
-        .btn-icon.delete:hover { background: rgba(239,68,68,0.15); }
-
         .btn-save-inline {
-            font-size: 0.78rem;
+            font-size: 0.88rem;
             font-weight: 700;
-            padding: 0.3rem 0.65rem;
+            padding: 0.4rem 0.75rem;
             background: rgba(129,140,248,0.15);
             border: 1px solid rgba(129,140,248,0.4);
             border-radius: 6px;
             color: #c7d2fe;
             cursor: pointer;
             font-family: inherit;
-            transition: background 0.15s;
         }
         .btn-save-inline:hover { background: rgba(129,140,248,0.28); }
 
         .btn-cancel-inline {
-            font-size: 0.78rem;
-            padding: 0.3rem 0.5rem;
+            font-size: 0.88rem;
+            padding: 0.4rem 0.6rem;
             background: none;
             border: 1px solid #334155;
             border-radius: 6px;
@@ -131,27 +305,34 @@
             cursor: pointer;
             font-family: inherit;
         }
-        .btn-cancel-inline:hover { background: rgba(255,255,255,0.04); }
 
-        /* ── Amount inline edit ── */
+        .btn-delete-icon {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px 8px;
+            color: #ef4444;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+        .btn-delete-icon:hover { background: rgba(239,68,68,0.15); }
+
         .amount-input {
-            width: 110px;
+            width: 120px;
             background: var(--bg);
             border: 1px solid #818cf8;
             border-radius: 6px;
-            padding: 0.3rem 0.5rem;
+            padding: 0.4rem 0.6rem;
             color: var(--text-primary);
-            font-size: 0.9rem;
+            font-size: 1rem;
             font-family: inherit;
             text-align: left;
             direction: ltr;
         }
         .amount-input:focus { outline: none; border-color: #a5b4fc; }
 
-        .actions-cell { display: flex; gap: 0.35rem; align-items: center; white-space: nowrap; }
-
         .saved-flash {
-            font-size: 0.75rem;
+            font-size: 0.85rem;
             color: #86efac;
             opacity: 0;
             transition: opacity 0.3s;
@@ -160,11 +341,11 @@
         /* ── Electricity special row ── */
         .elec-row td { background: rgba(251,191,36,0.06) !important; }
         .elec-row:hover td { background: rgba(251,191,36,0.12) !important; }
-        .elec-label { color: #fbbf24; font-weight: 600; }
+        .elec-label { color: #fbbf24; font-weight: 600; font-size: 1rem; }
         .btn-history {
-            font-size: 0.78rem;
+            font-size: 0.88rem;
             font-weight: 700;
-            padding: 0.28rem 0.65rem;
+            padding: 0.4rem 0.75rem;
             background: rgba(251,191,36,0.12);
             border: 1px solid rgba(251,191,36,0.35);
             border-radius: 6px;
@@ -173,50 +354,27 @@
             font-family: inherit;
             text-decoration: none;
             white-space: nowrap;
-            transition: background 0.15s;
         }
         .btn-history:hover { background: rgba(251,191,36,0.24); }
-
-        /* ── Type toggle buttons ── */
-        .type-toggle { display: flex; gap: 6px; margin-bottom: 8px; }
-        .type-btn {
-            font-size: 0.8rem; font-weight: 700; padding: 0.35rem 0.75rem;
-            border-radius: 6px; cursor: pointer; font-family: inherit;
-            background: rgba(255,255,255,0.05); border: 1px solid #334155;
-            color: var(--text-secondary); transition: all 0.15s;
-        }
-        .type-btn.active {
-            background: rgba(129,140,248,0.2); border-color: rgba(129,140,248,0.5);
-            color: #c7d2fe;
-        }
-        .type-btn:hover { background: rgba(129,140,248,0.12); }
-
-        .percent-fields { display: none; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap; }
-        .percent-fields.open { display: flex; }
-
-        .percent-preview {
-            font-size: 0.82rem; color: #86efac; padding: 0.4rem 0;
-            min-height: 1.5em;
-        }
-
-        /* ── Percent badge in table ── */
-        .pct-badge {
-            display: inline-block; font-size: 0.65rem; font-weight: 700;
-            background: rgba(251,191,36,0.18); color: #fbbf24;
-            border-radius: 4px; padding: 1px 5px; margin-inline-start: 6px;
-            vertical-align: middle;
-        }
-        .pct-amount-detail {
-            font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px;
-        }
 
         /* ── tfoot ── */
         tfoot td {
             font-weight: 700;
+            font-size: 1.05rem;
             color: #c7d2fe;
             background: #1a1d35 !important;
             border-top: 2px solid rgba(129,140,248,0.3) !important;
-            padding: 0.8rem 0.75rem;
+            padding: 14px 16px;
+        }
+
+        /* ── Mobile ── */
+        @media (max-width: 640px) {
+            .add-form-card { padding: 1.25rem 1rem; }
+            .form-field { min-width: 100%; }
+            .type-btn { font-size: 0.92rem; padding: 0.55rem 0.9rem; flex: 1; justify-content: center; }
+            .hide-mobile { display: none !important; }
+            .data-table thead th,
+            .data-table tbody td { padding: 12px 10px; font-size: 0.95rem; }
         }
     </style>
 </head>
@@ -294,55 +452,81 @@
         <div class="loading"><div class="spinner"></div><span>טוען...</span></div>
     </section>
 
+    <!-- Add expense form card (hidden by default) -->
+    <div class="add-form-card" id="add-form-card">
+        <h3>הוצאה חדשה</h3>
+
+        <!-- Name -->
+        <div class="form-row">
+            <div class="form-field" style="flex:2">
+                <label for="new-category">שם ההוצאה</label>
+                <input id="new-category" type="text" placeholder="למשל: ביטוח רכב, תיקון מזגן" maxlength="80">
+            </div>
+        </div>
+
+        <!-- Type toggle -->
+        <div class="type-toggle-section">
+            <label>סוג הוצאה</label>
+            <div class="type-toggle">
+                <button type="button" id="type-monthly" class="type-btn active-monthly" onclick="setExpenseType('monthly')">חודשי</button>
+                <button type="button" id="type-onetime" class="type-btn" onclick="setExpenseType('onetime')">חד פעמי</button>
+                <button type="button" id="type-percent" class="type-btn" onclick="setExpenseType('percent')">% מהכנסות</button>
+            </div>
+        </div>
+
+        <!-- Monthly fields -->
+        <div class="form-row fields-monthly open" id="fields-monthly">
+            <div class="form-field" style="max-width:220px">
+                <label for="new-amount">סכום חודשי (₪)</label>
+                <input id="new-amount" type="number" min="0" step="0.01" placeholder="0.00" style="direction:ltr">
+            </div>
+        </div>
+
+        <!-- One-time fields -->
+        <div class="form-row fields-onetime" id="fields-onetime">
+            <div class="form-field" style="max-width:220px">
+                <label for="new-onetime-amount">סכום (₪)</label>
+                <input id="new-onetime-amount" type="number" min="0" step="0.01" placeholder="0.00" style="direction:ltr">
+            </div>
+            <div class="form-field" style="max-width:220px">
+                <label for="new-payment-date">חודש תשלום</label>
+                <input id="new-payment-date" type="month" style="direction:ltr" value="{{ selected_month }}">
+            </div>
+        </div>
+
+        <!-- Percent fields -->
+        <div class="form-row fields-percent" id="fields-percent">
+            <div class="form-field" style="max-width:140px">
+                <label for="new-percent-value">אחוז %</label>
+                <input id="new-percent-value" type="number" min="0" step="0.1" placeholder="5" style="direction:ltr" oninput="updatePreview()">
+            </div>
+            <div class="form-field" style="max-width:200px">
+                <label for="new-percent-of">בסיס החישוב</label>
+                <select id="new-percent-of" onchange="updatePreview()">
+                    <option value="income">הכנסות</option>
+                    <option value="goods">סחורה</option>
+                    <option value="profit">רווח גולמי</option>
+                </select>
+            </div>
+            <div class="form-field" style="max-width:200px">
+                <label>&nbsp;</label>
+                <div class="percent-preview" id="percent-preview"></div>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn-save-form" onclick="saveNewExpense()">שמור</button>
+            <button class="btn-cancel-form" onclick="toggleAddPanel()">ביטול</button>
+        </div>
+    </div>
+
     <!-- Table card -->
     <div class="table-card">
         <div class="table-header">
             <h2><span class="page-accent">🏠</span> רשימת הוצאות קבועות</h2>
             <div style="display:flex;align-items:center;gap:1rem">
-                <span id="header-total" style="font-size:0.9rem;color:var(--text-secondary)"></span>
+                <span id="header-total" style="font-size:1rem;color:var(--text-secondary)"></span>
                 <button class="btn-add-main" onclick="toggleAddPanel()">+ הוסף הוצאה</button>
-            </div>
-        </div>
-
-        <!-- Inline add form -->
-        <div class="add-panel" id="add-panel">
-            <div style="width:100%">
-                <div class="type-toggle">
-                    <button type="button" id="type-fixed" class="type-btn active" onclick="setExpenseType('fixed')">₪ סכום קבוע</button>
-                    <button type="button" id="type-percent" class="type-btn" onclick="setExpenseType('percent')">% אחוז</button>
-                </div>
-            </div>
-            <div class="field">
-                <label for="new-category">שם ההוצאה</label>
-                <input id="new-category" type="text" placeholder='למשל: ביטוח רכב' maxlength="80">
-            </div>
-            <!-- Fixed amount field -->
-            <div class="field" id="fixed-amount-field">
-                <label for="new-amount">סכום חודשי (₪)</label>
-                <input id="new-amount" type="number" min="0" step="0.01" placeholder="0.00" style="direction:ltr">
-            </div>
-            <!-- Percent fields -->
-            <div class="percent-fields" id="percent-fields">
-                <div class="field" style="min-width:90px; flex:0.5">
-                    <label for="new-percent-value">אחוז %</label>
-                    <input id="new-percent-value" type="number" min="0" step="0.1" placeholder="5" style="direction:ltr" oninput="updatePreview()">
-                </div>
-                <div class="field" style="min-width:130px; flex:0.7">
-                    <label for="new-percent-of">בסיס החישוב</label>
-                    <select id="new-percent-of" style="background:var(--bg); border:1px solid #818cf8; border-radius:6px; padding:0.45rem 0.65rem; color:var(--text-primary); font-size:0.9rem; font-family:inherit;" onchange="updatePreview()">
-                        <option value="income">הכנסות</option>
-                        <option value="goods">סחורה</option>
-                        <option value="profit">רווח גולמי</option>
-                    </select>
-                </div>
-                <div class="field" style="min-width:140px; flex:0.6">
-                    <label>&nbsp;</label>
-                    <div class="percent-preview" id="percent-preview"></div>
-                </div>
-            </div>
-            <div class="panel-actions">
-                <button class="btn-save-inline" onclick="saveNewExpense()">✓ שמור</button>
-                <button class="btn-cancel-inline" onclick="toggleAddPanel()">ביטול</button>
             </div>
         </div>
 
@@ -351,14 +535,15 @@
                 <thead>
                     <tr>
                         <th>קטגוריה</th>
+                        <th>סוג</th>
                         <th>סכום חודשי</th>
-                        <th>בתוקף מ-</th>
-                        <th>הערות</th>
+                        <th class="hide-mobile">תאריך</th>
+                        <th class="hide-mobile">הערות</th>
                         <th>פעולות</th>
                     </tr>
                 </thead>
                 <tbody id="expenses-tbody">
-                    <tr><td colspan="5">
+                    <tr><td colspan="6">
                         <div class="loading"><div class="spinner"></div><span>טוען...</span></div>
                     </td></tr>
                 </tbody>
@@ -388,7 +573,7 @@ function catLabel(cat) { return CATEGORY_HE[cat] || cat; }
 
 let allExpenses = [];
 let elecEstimate = null;
-let expenseType = 'fixed';  // 'fixed' or 'percent'
+let expenseType = 'monthly';  // 'monthly', 'onetime', 'percent'
 
 function getBaseValue(base) {
     if (base === 'income') return MONTH_INCOME;
@@ -400,10 +585,14 @@ function getBaseValue(base) {
 // ── Type toggle ───────────────────────────────────────────────
 function setExpenseType(type) {
     expenseType = type;
-    document.getElementById('type-fixed').classList.toggle('active', type === 'fixed');
-    document.getElementById('type-percent').classList.toggle('active', type === 'percent');
-    document.getElementById('fixed-amount-field').style.display = type === 'fixed' ? '' : 'none';
-    document.getElementById('percent-fields').classList.toggle('open', type === 'percent');
+    // Reset all buttons
+    document.getElementById('type-monthly').className = 'type-btn' + (type === 'monthly' ? ' active-monthly' : '');
+    document.getElementById('type-onetime').className = 'type-btn' + (type === 'onetime' ? ' active-onetime' : '');
+    document.getElementById('type-percent').className = 'type-btn' + (type === 'percent' ? ' active-percent' : '');
+    // Show/hide field sections
+    document.getElementById('fields-monthly').classList.toggle('open', type === 'monthly');
+    document.getElementById('fields-onetime').classList.toggle('open', type === 'onetime');
+    document.getElementById('fields-percent').classList.toggle('open', type === 'percent');
     if (type === 'percent') updatePreview();
 }
 
@@ -440,7 +629,7 @@ async function loadExpenses() {
     } catch (err) {
         console.error(err);
         kpi.innerHTML   = '<p class="error-msg">שגיאה בטעינת נתונים.</p>';
-        tbody.innerHTML = '<tr><td colspan="5"><p class="error-msg">שגיאה בטעינת נתונים.</p></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6"><p class="error-msg">שגיאה בטעינת נתונים.</p></td></tr>';
     }
 }
 
@@ -449,62 +638,72 @@ function renderKpi(section, expenses) {
     section.innerHTML = `
         <div class="kpi-card kpi-card--fixed">
             <div class="kpi-header">
-                <span class="kpi-icon">🏠</span>
+                <span class="kpi-icon" style="font-size:1.3rem">🏠</span>
                 <span class="kpi-label">סה"כ הוצאות קבועות</span>
             </div>
             <span class="kpi-value fixed">${formatMoney(total)}</span>
-            <span style="font-size:0.8rem;color:rgba(241,245,249,0.5)">${expenses.length} רשומות</span>
+            <span style="font-size:0.9rem;color:rgba(241,245,249,0.5)">${expenses.length} רשומות</span>
         </div>`;
+}
+
+function getTypeBadge(e) {
+    if (e.percent_of && e.percent_value) {
+        return '<span class="type-badge type-badge--percent">% אחוז</span>';
+    }
+    const isRecurring = e.is_recurring === undefined || e.is_recurring === null || e.is_recurring === 1;
+    if (!isRecurring) {
+        return '<span class="type-badge type-badge--onetime">חד פעמי</span>';
+    }
+    return '<span class="type-badge type-badge--monthly">חודשי</span>';
 }
 
 function renderTable(tbody, expenses) {
     const elecRow = `
         <tr class="elec-row">
             <td><span class="elec-label">⚡ חשמל (משוער)</span></td>
-            <td class="money" style="color:#fbbf24">
+            <td><span class="type-badge type-badge--monthly">חודשי</span></td>
+            <td class="money" style="color:#fbbf24; font-size:1rem;">
                 ${elecEstimate !== null ? formatMoney(elecEstimate) : '—'}
             </td>
-            <td style="color:var(--text-muted);font-size:0.8rem">אוטומטי</td>
-            <td style="color:var(--text-muted);font-size:0.8rem">מחושב מחשבון אחרון</td>
+            <td class="hide-mobile" style="color:var(--text-muted);font-size:0.9rem">אוטומטי</td>
+            <td class="hide-mobile" style="color:var(--text-muted);font-size:0.9rem">מחושב מחשבון אחרון</td>
             <td><a href="/electricity-history" class="btn-history">היסטוריה ←</a></td>
         </tr>`;
 
     if (!expenses.length) {
-        tbody.innerHTML = elecRow + '<tr><td colspan="5" style="text-align:center;padding:2rem;color:var(--text-muted)">אין הוצאות קבועות. לחץ "+ הוסף הוצאה" כדי להוסיף.</td></tr>';
+        tbody.innerHTML = elecRow + '<tr><td colspan="6" style="text-align:center;padding:2rem;color:var(--text-muted);font-size:1rem">אין הוצאות קבועות. לחץ "+ הוסף הוצאה" כדי להוסיף.</td></tr>';
         updateTotals(expenses);
         return;
     }
     tbody.innerHTML = elecRow + expenses.map(e => {
         const isPct = e.percent_of && e.percent_value;
+        const isOnetime = e.is_recurring !== undefined && e.is_recurring !== null && e.is_recurring === 0;
         const displayAmt = e.display_amount || e.amount;
         const amountHtml = isPct
             ? `<span>${formatMoney(displayAmt)}</span><div class="pct-amount-detail">${e.percent_value}% מ${BASE_LABELS[e.percent_of] || e.percent_of}</div>`
             : `<span id="display-${e.id}">${formatMoney(displayAmt)}</span>`;
-        const catHtml = isPct
-            ? `${catLabel(e.category)}<span class="pct-badge">%</span>`
-            : catLabel(e.category);
+        const dateCol = isOnetime
+            ? (e.payment_date || '').slice(0,7)
+            : (e.valid_from || '');
         const editInput = isPct ? '' : `<input class="amount-input" id="input-${e.id}" type="number" min="0" step="0.01" value="${e.amount}" style="display:none">`;
         const editBtn = isPct ? '' : `<button class="btn-icon" onclick="startEdit(${e.id})" id="btn-edit-${e.id}" title="ערוך">✏️</button>
-                    <button class="btn-save-inline" onclick="saveEdit(${e.id})" id="btn-save-${e.id}" style="display:none">✓ שמור</button>
-                    <button class="btn-cancel-inline" onclick="cancelEdit(${e.id})" id="btn-cancel-${e.id}" style="display:none">✗</button>`;
+                    <button class="btn-save-inline" onclick="saveEdit(${e.id})" id="btn-save-${e.id}" style="display:none">שמור</button>
+                    <button class="btn-cancel-inline" onclick="cancelEdit(${e.id})" id="btn-cancel-${e.id}" style="display:none">ביטול</button>`;
         return `
         <tr id="row-${e.id}">
-            <td>${catHtml}</td>
-            <td class="money fixed" id="amount-cell-${e.id}">
+            <td style="font-weight:600">${catLabel(e.category)}</td>
+            <td>${getTypeBadge(e)}</td>
+            <td class="money fixed" id="amount-cell-${e.id}" style="font-size:1rem">
                 ${amountHtml}
                 ${editInput}
             </td>
-            <td style="color:var(--text-secondary);font-size:0.85rem">${e.valid_from || ''}</td>
-            <td style="color:var(--text-secondary);font-size:0.85rem">${e.notes || ''}</td>
+            <td class="hide-mobile" style="color:var(--text-secondary);font-size:0.9rem">${dateCol}</td>
+            <td class="hide-mobile" style="color:var(--text-secondary);font-size:0.9rem">${e.notes || ''}</td>
             <td>
                 <div class="actions-cell" id="actions-${e.id}">
                     ${editBtn}
-                    <button onclick="deleteExpense(${e.id})" title="מחק"
-                            style="background:none; border:none; cursor:pointer; padding:4px 6px;
-                                   color:#ef4444; border-radius:4px; transition:background 0.2s;"
-                            onmouseover="this.style.background='rgba(239,68,68,0.15)'"
-                            onmouseout="this.style.background='none'">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"
+                    <button onclick="deleteExpense(${e.id})" title="מחק" class="btn-delete-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18"
                              viewBox="0 0 24 24" fill="none" stroke="currentColor"
                              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="3 6 5 6 21 6"></polyline>
@@ -528,9 +727,9 @@ function updateTotals(expenses) {
     const total      = fixedTotal + elecPart;
     document.getElementById('expenses-tfoot').innerHTML = `
         <tr>
-            <td>סה"כ (כולל חשמל משוער)</td>
+            <td colspan="2">סה"כ (כולל חשמל משוער)</td>
             <td class="money" style="color:#c7d2fe">${formatMoney(total)}</td>
-            <td colspan="3"></td>
+            <td colspan="3" class="hide-mobile"></td>
         </tr>`;
     document.getElementById('header-total').textContent = `סה"כ: ${formatMoney(total)}`;
     const kpi = document.getElementById('kpi-section');
@@ -539,19 +738,18 @@ function updateTotals(expenses) {
 
 // ── Add panel ─────────────────────────────────────────────────
 function toggleAddPanel() {
-    const panel = document.getElementById('add-panel');
+    const panel = document.getElementById('add-form-card');
     panel.classList.toggle('open');
     if (panel.classList.contains('open')) {
         document.getElementById('new-category').focus();
     } else {
-        // Reset to fixed type when closing
-        setExpenseType('fixed');
+        setExpenseType('monthly');
     }
 }
 
 async function saveNewExpense() {
-    const catInput    = document.getElementById('new-category');
-    const category    = catInput.value.trim();
+    const catInput = document.getElementById('new-category');
+    const category = catInput.value.trim();
     if (!category) { catInput.focus(); return; }
 
     let body = { category };
@@ -563,9 +761,15 @@ async function saveNewExpense() {
         body.amount = 0;
         body.percent_of = pctOf;
         body.percent_value = pctVal;
+    } else if (expenseType === 'onetime') {
+        const amt = parseFloat(document.getElementById('new-onetime-amount').value) || 0;
+        const paymentMonth = document.getElementById('new-payment-date').value; // YYYY-MM
+        if (amt <= 0) { document.getElementById('new-onetime-amount').focus(); return; }
+        body.amount = amt;
+        body.is_recurring = 0;
+        body.payment_date = paymentMonth + '-01';
     } else {
-        const amountInput = document.getElementById('new-amount');
-        body.amount = parseFloat(amountInput.value) || 0;
+        body.amount = parseFloat(document.getElementById('new-amount').value) || 0;
     }
 
     try {
@@ -576,16 +780,16 @@ async function saveNewExpense() {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-        // Reload from server to get computed display_amount
         await loadExpenses();
 
         // Reset form
         catInput.value = '';
         document.getElementById('new-amount').value = '';
+        document.getElementById('new-onetime-amount').value = '';
         document.getElementById('new-percent-value').value = '';
         document.getElementById('percent-preview').textContent = '';
-        setExpenseType('fixed');
-        document.getElementById('add-panel').classList.remove('open');
+        setExpenseType('monthly');
+        document.getElementById('add-form-card').classList.remove('open');
     } catch (err) {
         console.error(err);
         alert('שגיאה בהוספת הוצאה.');
@@ -659,7 +863,6 @@ async function saveEdit(id) {
 // ── Boot ───────────────────────────────────────────────────────
 loadExpenses();
 
-// Hamburger menu toggle
 document.getElementById('hamburger').addEventListener('click', function() {
     document.getElementById('mobile-nav').classList.toggle('open');
 });

@@ -445,15 +445,17 @@ def update_fixed_expense(expense_id: int, category: str = None, amount: float = 
 
 
 def insert_fixed_expense_full(category: str, amount: float,
-                               percent_of: str = None, percent_value: float = None) -> int:
-    """Insert a fixed expense, optionally percent-based. Returns new row id."""
+                               percent_of: str = None, percent_value: float = None,
+                               is_recurring: int = 1, payment_date: str = None) -> int:
+    """Insert a fixed expense, optionally percent-based or one-time. Returns new row id."""
     today = date.today().isoformat()
     if percent_of and percent_value and percent_value > 0:
         amount = 0
     with get_connection() as conn:
         cur = conn.execute(
-            "INSERT INTO fixed_expenses (category, amount, valid_from, percent_of, percent_value) VALUES (?, ?, ?, ?, ?)",
-            (category, amount, today, percent_of, percent_value),
+            "INSERT INTO fixed_expenses (category, amount, valid_from, percent_of, percent_value, is_recurring, payment_date) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (category, amount, today, percent_of, percent_value, is_recurring, payment_date),
         )
         return cur.lastrowid
 
@@ -697,9 +699,22 @@ def calculate_estimated_profit(month: int, year: int) -> dict:
     elec_data = get_electricity_estimate_for_month(year, month)
     electricity = elec_data["estimate"] if elec_data else 0
 
-    fixed_total = get_total_fixed_expenses()
-    # Add percent-based fixed expenses (computed dynamically)
     month_str = f"{year:04d}-{month:02d}"
+    # Sum recurring fixed expenses (exclude one-time and percent-based)
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS total FROM fixed_expenses "
+            "WHERE (is_recurring = 1 OR is_recurring IS NULL) AND percent_of IS NULL",
+        ).fetchone()
+        fixed_total = row["total"]
+        # Add one-time expenses for this specific month
+        row2 = conn.execute(
+            "SELECT COALESCE(SUM(amount), 0) AS total FROM fixed_expenses "
+            "WHERE is_recurring = 0 AND payment_date LIKE ?",
+            (month_str + "%",),
+        ).fetchone()
+        fixed_total += row2["total"]
+    # Add percent-based fixed expenses (computed dynamically)
     percent_expenses_total = _compute_percent_expenses_total(month_str)
     fixed_total += percent_expenses_total
     fixed_prorated = fixed_total * ratio + electricity

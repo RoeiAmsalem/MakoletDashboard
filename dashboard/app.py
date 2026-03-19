@@ -503,6 +503,12 @@ def api_fixed_expenses_list():
     result = []
     for r in rows:
         d = dict(r)
+        # Filter one-time expenses: only show in their payment month
+        is_recurring = d.get("is_recurring", 1)
+        if is_recurring is not None and int(is_recurring) == 0:
+            payment_date = d.get("payment_date") or ""
+            if not payment_date.startswith(month_str):
+                continue
         if d.get("percent_of") and d.get("percent_value"):
             base = compute_percent_base(month_str, d["percent_of"])
             d["display_amount"] = round(base * d["percent_value"] / 100, 2)
@@ -522,12 +528,16 @@ def api_fixed_expenses_create():
     amount        = body.get("amount", 0)
     percent_of    = (body.get("percent_of") or "").strip() or None
     percent_value = body.get("percent_value")
+    is_recurring  = body.get("is_recurring", 1)
+    payment_date  = (body.get("payment_date") or "").strip() or None
     if not category:
         return jsonify({"error": "category required"}), 400
     new_id = insert_fixed_expense_full(
         category, float(amount),
         percent_of=percent_of,
         percent_value=float(percent_value) if percent_value else None,
+        is_recurring=int(is_recurring),
+        payment_date=payment_date,
     )
     return jsonify({"ok": True, "id": new_id}), 201
 

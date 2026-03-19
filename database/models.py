@@ -169,10 +169,12 @@ def _migrate_daily_sales_columns(conn):
 
 
 def _migrate_fixed_expenses_columns(conn):
-    """Add percent_of and percent_value columns to fixed_expenses if they don't exist yet."""
+    """Add percent_of, percent_value, is_recurring, payment_date columns to fixed_expenses."""
     for col, definition in [
         ("percent_of", "TEXT DEFAULT NULL"),
         ("percent_value", "REAL DEFAULT NULL"),
+        ("is_recurring", "INTEGER DEFAULT 1"),
+        ("payment_date", "TEXT DEFAULT NULL"),
     ]:
         try:
             conn.execute(f"ALTER TABLE fixed_expenses ADD COLUMN {col} {definition}")

@@ -661,6 +661,13 @@ body {
         padding: 1rem;
     }
 
+    /* Larger touch targets */
+    button, .btn, a.btn { min-height: 40px; }
+
+    /* Table base mobile */
+    .data-table { font-size: 0.85rem; }
+    .data-table td, .data-table th { padding: 10px 8px; }
+
     /* PDF modal fullscreen on mobile */
     .pdf-modal {
         width: 98vw !important;

@@ -103,8 +103,10 @@
         }
 
         /* ── Hide on mobile ── */
-        @media (max-width: 640px) {
+        @media (max-width: 768px) {
             .hide-mobile { display: none !important; }
+            .supplier-cell { max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .filter-btn { flex: 1; text-align: center; min-height: 40px; }
         }
     </style>
 </head>
@@ -228,10 +230,10 @@
                     <tr>
                         <th>תאריך</th>
                         <th>ספק</th>
-                        <th>מס' מסמך</th>
-                        <th>סוג מסמך</th>
+                        <th class="hide-mobile">מס' מסמך</th>
+                        <th>סוג</th>
                         <th class="hide-mobile">לפני מע"מ</th>
-                        <th>סה"כ כולל מע"מ</th>
+                        <th>סה"כ <span class="hide-mobile">כולל מע"מ</span></th>
                     </tr>
                 </thead>
                 <tbody id="goods-tbody">
@@ -239,8 +241,8 @@
                     {% for r in rows %}
                     <tr data-doctype="{{ r.doc_type or '' }}">
                         <td>{{ r.date[8:10] }}/{{ r.date[5:7] }}/{{ r.date[0:4] if r.date and r.date|length >= 10 else r.date }}</td>
-                        <td>{{ r.supplier or '—' }}</td>
-                        <td style="color:var(--text-secondary)">{{ r.ref_number or '—' }}</td>
+                        <td class="supplier-cell">{{ r.supplier or '—' }}</td>
+                        <td class="hide-mobile" style="color:var(--text-secondary)">{{ r.ref_number or '—' }}</td>
                         <td>
                             {% if r.doc_type == 2 %}
                             <span class="badge badge-blue">{{ r.doc_type_name or 'תעודת משלוח' }}</span>
@@ -265,7 +267,7 @@
                     <tr>
                         <td>סה"כ</td>
                         <td></td>
-                        <td></td>
+                        <td class="hide-mobile"></td>
                         <td></td>
                         <td class="hide-mobile">₪{{ '{:,.2f}'.format(total_before_vat) }}</td>
                         <td>₪{{ '{:,.2f}'.format(total) }}</td>

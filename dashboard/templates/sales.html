@@ -54,6 +54,10 @@
             text-decoration: none;
         }
         .btn-pdf:hover { background: rgba(52,211,153,0.22); }
+        @media (max-width: 768px) {
+            .hide-mobile { display: none !important; }
+            .btn-pdf { width: 100%; text-align: center; min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+        }
 
         /* ── tfoot ── */
         tfoot td {
@@ -217,7 +221,7 @@
                 <thead>
                     <tr>
                         <th>תאריך</th>
-                        <th>יום</th>
+                        <th class="hide-mobile">יום</th>
                         <th>סכום</th>
                         <th>PDF</th>
                     </tr>
@@ -318,7 +322,7 @@ function salesRow(s) {
         : '<span style="color:var(--text-muted)">—</span>';
     return `<tr>
         <td>${fmtDate(s.date)}</td>
-        <td style="color:var(--text-secondary)">${dayName(s.date)}</td>
+        <td class="hide-mobile" style="color:var(--text-secondary)">${dayName(s.date)}</td>
         <td class="money sales-amount">${formatMoney(s.total_income)}</td>
         <td>${pdfBtn}</td>
     </tr>`;
@@ -385,7 +389,7 @@ async function loadSales() {
             const grandTotal = sales.reduce((s, r) => s + r.total_income, 0);
             document.getElementById('sales-tfoot').innerHTML = `
                 <tr>
-                    <td>סה"כ</td><td></td>
+                    <td>סה"כ</td><td class="hide-mobile"></td>
                     <td class="money">${formatMoney(grandTotal)}</td>
                     <td></td>
                 </tr>`;

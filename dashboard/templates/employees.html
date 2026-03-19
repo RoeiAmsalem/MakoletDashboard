@@ -355,8 +355,16 @@
 
         .edit-actions { display: flex; gap: 0.5rem; }
 
-        @media (max-width: 600px) {
+        @media (max-width: 768px) {
             .employee-cards { grid-template-columns: 1fr; }
+            .hide-mobile { display: none !important; }
+            .btn-card-action { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; font-size: 1rem; }
+            .btn-add-main { width: 100%; min-height: 44px; text-align: center; }
+            .btn-add-unmatched { min-height: 40px; padding: 0.3rem 0.75rem; }
+            .add-emp-panel .field { min-width: 100%; }
+            .add-emp-panel { flex-direction: column; }
+            .panel-actions { width: 100%; }
+            .panel-actions button { flex: 1; min-height: 44px; }
         }
     </style>
 </head>
@@ -586,7 +594,7 @@ function renderCards(container, employees, unmatched, pastEmployees) {
 
         const hoursInfo = e.hours_worked != null
             ? `<span class="emp-hours-info matched">${e.hours_worked.toFixed(1)} שעות → ${formatMoney(e.salary || e.hours_worked * e.hourly_rate)}</span>`
-            : '<span class="emp-hours-info pending">טרם הועלה דוח שעות</span>';
+            : '<span class="emp-hours-info pending">טרם הועלה<span class="hide-mobile"> דוח שעות</span></span>';
 
         const adminBtns = IS_ADMIN && e.is_active ? `
             <button class="btn-card-action" onclick="enterEditMode(${e.id})" title="עריכה">✏️</button>

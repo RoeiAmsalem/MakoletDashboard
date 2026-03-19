@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>מסך בית - מכולת דשבורד</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        @media (max-width: 768px) {
+            .mobile-view-toggle { display: flex !important; }
+        }
+    </style>
 </head>
 <body>
 
@@ -74,6 +79,12 @@
         <a href="/?month={{ now().strftime('%Y-%m') }}" style="color:#f59e0b; text-decoration:none; padding:2px 7px; border-radius:4px; background:rgba(245,158,11,0.15); font-size:0.8rem; font-weight:600;">היום</a>
         {% endif %}
     </div>
+    <div style="display:none;justify-content:center;gap:8px;margin-top:4px;padding-bottom:6px;" class="mobile-view-toggle" id="mobile-view-toggle">
+        <button id="mob-btn-prorated" onclick="setViewMode('prorated')"
+            style="font-size:0.75rem;padding:4px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.15);color:white;cursor:pointer;font-family:inherit;">יחסי</button>
+        <button id="mob-btn-full" onclick="setViewMode('full')"
+            style="font-size:0.75rem;padding:4px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.1);background:transparent;color:#aaa;cursor:pointer;font-family:inherit;">מלא</button>
+    </div>
 </nav>
 
 <main class="main-content">
@@ -109,7 +120,7 @@
                         <th>הכנסות</th>
                         <th>סחורה</th>
                         <th class="hide-mobile">חשמל</th>
-                        <th>הוצאות קבועות</th>
+                        <th class="hide-mobile">הוצאות קבועות</th>
                         <th class="hide-mobile">שכר</th>
                         <th>רווח</th>
                         <th>סטטוס</th>
@@ -261,6 +272,12 @@ function applyViewMode() {
     const offBg = 'none';
     const offClr = 'rgba(255,255,255,0.45)';
 
+    // Mobile buttons
+    const mobPro  = document.getElementById('mob-btn-prorated');
+    const mobFull = document.getElementById('mob-btn-full');
+    const mobOnBg = 'rgba(255,255,255,0.2)'; const mobOnClr = 'white'; const mobOnBdr = 'rgba(255,255,255,0.4)';
+    const mobOffBg = 'transparent'; const mobOffClr = '#aaa'; const mobOffBdr = 'rgba(255,255,255,0.1)';
+
     if (mode === 'full') {
         fixedVal.textContent = formatMoney(d.fixed_total);
         fixedSub.textContent = '';
@@ -270,6 +287,8 @@ function applyViewMode() {
         profitLbl.textContent = 'רווח חודשי מלא';
         btnFull.style.background = onBg;  btnFull.style.color = onClr;
         btnPro.style.background  = offBg; btnPro.style.color  = offClr;
+        if (mobFull) { mobFull.style.background = mobOnBg; mobFull.style.color = mobOnClr; mobFull.style.borderColor = mobOnBdr; }
+        if (mobPro)  { mobPro.style.background  = mobOffBg; mobPro.style.color  = mobOffClr; mobPro.style.borderColor  = mobOffBdr; }
     } else {
         fixedVal.textContent = formatMoney(d.fixed_prorated);
         fixedSub.textContent = `יום ${d.days_passed} מתוך ${d.days_in_month}`;
@@ -279,6 +298,8 @@ function applyViewMode() {
         profitLbl.textContent = anyEst ? 'רווח משוער' : 'רווח חודשי';
         btnPro.style.background  = onBg;  btnPro.style.color  = onClr;
         btnFull.style.background = offBg; btnFull.style.color = offClr;
+        if (mobPro)  { mobPro.style.background  = mobOnBg; mobPro.style.color  = mobOnClr; mobPro.style.borderColor  = mobOnBdr; }
+        if (mobFull) { mobFull.style.background = mobOffBg; mobFull.style.color = mobOffClr; mobFull.style.borderColor = mobOffBdr; }
     }
 }
 
@@ -325,7 +346,7 @@ function renderTable(months, tbody) {
                 <td class="money profit">${formatMoney(m.income)}</td>
                 <td class="money loss">${formatMoney(m.goods)}</td>
                 <td class="money loss hide-mobile">${formatMoney(m.electricity)}</td>
-                <td class="money fixed">${formatMoney(m.fixed_prorated)}</td>
+                <td class="money fixed hide-mobile">${formatMoney(m.fixed_prorated)}</td>
                 <td class="money salary hide-mobile">${formatMoney(m.salary)}</td>
                 <td class="money ${profitClass}">${formatMoney(m.profit)}</td>
                 <td>${badge}</td>
@@ -340,9 +361,13 @@ function renderTable(months, tbody) {
     const mode = localStorage.getItem('view_mode') || 'prorated';
     const btnPro = document.getElementById('vm-prorated');
     const btnFull = document.getElementById('vm-full');
+    const mobPro = document.getElementById('mob-btn-prorated');
+    const mobFull = document.getElementById('mob-btn-full');
     if (mode === 'full') {
         btnFull.style.background = 'rgba(255,255,255,0.12)'; btnFull.style.color = 'white';
         btnPro.style.background = 'none'; btnPro.style.color = 'rgba(255,255,255,0.45)';
+        if (mobFull) { mobFull.style.background = 'rgba(255,255,255,0.2)'; mobFull.style.color = 'white'; mobFull.style.borderColor = 'rgba(255,255,255,0.4)'; }
+        if (mobPro)  { mobPro.style.background = 'transparent'; mobPro.style.color = '#aaa'; mobPro.style.borderColor = 'rgba(255,255,255,0.1)'; }
     }
 })();
 loadSummary();

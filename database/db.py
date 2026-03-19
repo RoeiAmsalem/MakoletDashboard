@@ -738,6 +738,7 @@ def calculate_estimated_profit(month: int, year: int) -> dict:
         "income": income,
         "goods": goods,
         "electricity": electricity,
+        "fixed_total": fixed_total,
         "fixed_prorated": fixed_prorated,
         "salary": salary,
         "profit": profit,

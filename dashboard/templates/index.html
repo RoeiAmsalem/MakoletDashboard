@@ -151,13 +151,17 @@ async function loadSummary() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const d = await res.json();
         renderKpis(section, d);
+        applyFixedMode();
     } catch (err) {
         console.error('summary:', err);
         section.innerHTML = '<p class="error-msg">שגיאה בטעינת נתוני חודש שוטף. נסה שוב מאוחר יותר.</p>';
     }
 }
 
+let _summaryData = null;
+
 function renderKpis(section, d) {
+    _summaryData = d;
     const profitCardClass = d.profit > 0 ? 'kpi-card--profit'
                           : d.profit < 0 ? 'kpi-card--loss'
                           : 'kpi-card--neutral';
@@ -207,12 +211,19 @@ function renderKpis(section, d) {
             <span class="kpi-value" style="color:#fff">${formatMoney(d.goods)}</span>
         </div>
 
-        <div class="kpi-card kpi-card--fixed" style="cursor:pointer" onclick="location.href='/fixed-expenses'">
-            <div class="kpi-header">
+        <div class="kpi-card kpi-card--fixed" id="fixed-tile">
+            <div class="kpi-header" style="cursor:pointer" onclick="location.href='/fixed-expenses'">
                 <span class="kpi-icon">🏠</span>
                 <span class="kpi-label">הוצאות קבועות</span>
             </div>
-            <span class="kpi-value fixed">${formatMoney(d.fixed_prorated)}</span>
+            <span class="kpi-value fixed" id="fixed-value" style="cursor:pointer" onclick="location.href='/fixed-expenses'">${formatMoney(d.fixed_total)}</span>
+            <span id="fixed-subtitle" style="font-size:0.75rem;color:rgba(241,245,249,0.45);margin-top:0.15rem"></span>
+            <div style="display:flex;gap:4px;margin-top:0.4rem" id="fixed-toggle">
+                <button onclick="event.stopPropagation();setFixedMode('full')" id="ftog-full"
+                    style="font-size:0.72rem;font-weight:600;padding:2px 8px;border-radius:4px;cursor:pointer;font-family:inherit;border:1px solid rgba(255,255,255,0.15);background:rgba(255,255,255,0.12);color:white;">מלא</button>
+                <button onclick="event.stopPropagation();setFixedMode('prorated')" id="ftog-prorated"
+                    style="font-size:0.72rem;font-weight:600;padding:2px 8px;border-radius:4px;cursor:pointer;font-family:inherit;border:1px solid rgba(255,255,255,0.15);background:none;color:rgba(255,255,255,0.45);">יחסי</button>
+            </div>
         </div>
 
         <div class="kpi-card kpi-card--salary" style="cursor:pointer" onclick="location.href='/employees'">
@@ -226,6 +237,39 @@ function renderKpis(section, d) {
             ${d.unmatched_employees > 0 ? `<span style="font-size:0.75rem;color:#fde68a;margin-top:0.2rem">⚠️ ${d.unmatched_employees} עובדים לא זוהו</span>` : ''}
         </div>
     `;
+}
+
+// ── Fixed tile toggle ────────────────────────────────────────────
+function setFixedMode(mode) {
+    localStorage.setItem('fixed_display_mode', mode);
+    applyFixedMode();
+}
+
+function applyFixedMode() {
+    if (!_summaryData) return;
+    const d = _summaryData;
+    const mode = localStorage.getItem('fixed_display_mode') || 'full';
+    const valEl = document.getElementById('fixed-value');
+    const subEl = document.getElementById('fixed-subtitle');
+    const btnFull = document.getElementById('ftog-full');
+    const btnPro  = document.getElementById('ftog-prorated');
+    if (!valEl) return;
+
+    if (mode === 'prorated') {
+        valEl.textContent = formatMoney(d.fixed_prorated);
+        subEl.textContent = `${d.days_passed}/${d.days_in_month} ימים · כולל חשמל`;
+        btnFull.style.background = 'none';
+        btnFull.style.color = 'rgba(255,255,255,0.45)';
+        btnPro.style.background = 'rgba(255,255,255,0.12)';
+        btnPro.style.color = 'white';
+    } else {
+        valEl.textContent = formatMoney(d.fixed_total);
+        subEl.textContent = '';
+        btnFull.style.background = 'rgba(255,255,255,0.12)';
+        btnFull.style.color = 'white';
+        btnPro.style.background = 'none';
+        btnPro.style.color = 'rgba(255,255,255,0.45)';
+    }
 }
 
 // ── Chart + Table (shared fetch) ───────────────────────────────

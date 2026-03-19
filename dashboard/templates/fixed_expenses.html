@@ -113,17 +113,17 @@
             box-shadow: 0 0 0 2px rgba(129,140,248,0.15);
         }
 
-        /* ── Type toggle — big buttons ── */
-        .type-toggle-section { margin-bottom: 1.25rem; }
-        .type-toggle-section > label {
+        /* ── Toggle section ── */
+        .toggle-section { margin-bottom: 1.25rem; }
+        .toggle-section-label {
             font-size: 0.88rem;
             font-weight: 600;
-            color: var(--text-secondary);
+            color: #94a3b8;
             display: block;
             margin-bottom: 0.5rem;
         }
 
-        .type-toggle {
+        .toggle-row {
             display: flex;
             gap: 8px;
             flex-wrap: wrap;
@@ -145,6 +145,16 @@
             gap: 0.4rem;
         }
 
+        .type-btn.active-amount {
+            background: rgba(129,140,248,0.15);
+            border-color: rgba(129,140,248,0.5);
+            color: #c7d2fe;
+        }
+        .type-btn.active-percent {
+            background: rgba(251,191,36,0.15);
+            border-color: rgba(251,191,36,0.5);
+            color: #fcd34d;
+        }
         .type-btn.active-monthly {
             background: rgba(96,165,250,0.15);
             border-color: rgba(96,165,250,0.5);
@@ -155,23 +165,18 @@
             border-color: rgba(251,146,60,0.5);
             color: #fdba74;
         }
-        .type-btn.active-percent {
-            background: rgba(251,191,36,0.15);
-            border-color: rgba(251,191,36,0.5);
-            color: #fcd34d;
-        }
 
         .type-btn:hover { background: rgba(255,255,255,0.08); }
 
         /* ── Conditional field sections ── */
-        .fields-monthly,
-        .fields-onetime,
-        .fields-percent {
+        .fields-amount,
+        .fields-percent,
+        .fields-onetime-date {
             display: none;
         }
-        .fields-monthly.open,
-        .fields-onetime.open,
-        .fields-percent.open {
+        .fields-amount.open,
+        .fields-percent.open,
+        .fields-onetime-date.open {
             display: flex;
         }
 
@@ -464,33 +469,20 @@
             </div>
         </div>
 
-        <!-- Type toggle -->
-        <div class="type-toggle-section">
-            <label>סוג הוצאה</label>
-            <div class="type-toggle">
-                <button type="button" id="type-monthly" class="type-btn active-monthly" onclick="setExpenseType('monthly')">חודשי</button>
-                <button type="button" id="type-onetime" class="type-btn" onclick="setExpenseType('onetime')">חד פעמי</button>
-                <button type="button" id="type-percent" class="type-btn" onclick="setExpenseType('percent')">% מהכנסות</button>
+        <!-- Q1: כמה? -->
+        <div class="toggle-section">
+            <span class="toggle-section-label">כמה?</span>
+            <div class="toggle-row">
+                <button type="button" id="amt-type-fixed" class="type-btn active-amount" onclick="setAmountType('fixed')">₪ סכום קבוע</button>
+                <button type="button" id="amt-type-percent" class="type-btn" onclick="setAmountType('percent')">% מהכנסות</button>
             </div>
         </div>
 
-        <!-- Monthly fields -->
-        <div class="form-row fields-monthly open" id="fields-monthly">
+        <!-- Fixed amount input -->
+        <div class="form-row fields-amount open" id="fields-amount">
             <div class="form-field" style="max-width:220px">
-                <label for="new-amount">סכום חודשי (₪)</label>
+                <label for="new-amount">סכום (₪)</label>
                 <input id="new-amount" type="number" min="0" step="0.01" placeholder="0.00" style="direction:ltr">
-            </div>
-        </div>
-
-        <!-- One-time fields -->
-        <div class="form-row fields-onetime" id="fields-onetime">
-            <div class="form-field" style="max-width:220px">
-                <label for="new-onetime-amount">סכום (₪)</label>
-                <input id="new-onetime-amount" type="number" min="0" step="0.01" placeholder="0.00" style="direction:ltr">
-            </div>
-            <div class="form-field" style="max-width:220px">
-                <label for="new-payment-date">חודש תשלום</label>
-                <input id="new-payment-date" type="month" style="direction:ltr" value="{{ selected_month }}">
             </div>
         </div>
 
@@ -511,6 +503,23 @@
             <div class="form-field" style="max-width:200px">
                 <label>&nbsp;</label>
                 <div class="percent-preview" id="percent-preview"></div>
+            </div>
+        </div>
+
+        <!-- Q2: מתי? -->
+        <div class="toggle-section">
+            <span class="toggle-section-label">מתי?</span>
+            <div class="toggle-row">
+                <button type="button" id="when-monthly" class="type-btn active-monthly" onclick="setWhenType('monthly')">חודשי</button>
+                <button type="button" id="when-onetime" class="type-btn" onclick="setWhenType('onetime')">חד פעמי</button>
+            </div>
+        </div>
+
+        <!-- One-time date picker (only visible when חד פעמי) -->
+        <div class="form-row fields-onetime-date" id="fields-onetime-date">
+            <div class="form-field" style="max-width:220px">
+                <label for="new-payment-date">חודש תשלום</label>
+                <input id="new-payment-date" type="month" style="direction:ltr" value="{{ selected_month }}">
             </div>
         </div>
 
@@ -573,7 +582,8 @@ function catLabel(cat) { return CATEGORY_HE[cat] || cat; }
 
 let allExpenses = [];
 let elecEstimate = null;
-let expenseType = 'monthly';  // 'monthly', 'onetime', 'percent'
+let amountType = 'fixed';   // 'fixed' or 'percent'
+let whenType   = 'monthly'; // 'monthly' or 'onetime'
 
 function getBaseValue(base) {
     if (base === 'income') return MONTH_INCOME;
@@ -582,18 +592,22 @@ function getBaseValue(base) {
     return 0;
 }
 
-// ── Type toggle ───────────────────────────────────────────────
-function setExpenseType(type) {
-    expenseType = type;
-    // Reset all buttons
-    document.getElementById('type-monthly').className = 'type-btn' + (type === 'monthly' ? ' active-monthly' : '');
-    document.getElementById('type-onetime').className = 'type-btn' + (type === 'onetime' ? ' active-onetime' : '');
-    document.getElementById('type-percent').className = 'type-btn' + (type === 'percent' ? ' active-percent' : '');
-    // Show/hide field sections
-    document.getElementById('fields-monthly').classList.toggle('open', type === 'monthly');
-    document.getElementById('fields-onetime').classList.toggle('open', type === 'onetime');
+// ── Q1: כמה? ──────────────────────────────────────────────────
+function setAmountType(type) {
+    amountType = type;
+    document.getElementById('amt-type-fixed').className   = 'type-btn' + (type === 'fixed'   ? ' active-amount'  : '');
+    document.getElementById('amt-type-percent').className  = 'type-btn' + (type === 'percent' ? ' active-percent' : '');
+    document.getElementById('fields-amount').classList.toggle('open', type === 'fixed');
     document.getElementById('fields-percent').classList.toggle('open', type === 'percent');
     if (type === 'percent') updatePreview();
+}
+
+// ── Q2: מתי? ──────────────────────────────────────────────────
+function setWhenType(type) {
+    whenType = type;
+    document.getElementById('when-monthly').className = 'type-btn' + (type === 'monthly' ? ' active-monthly' : '');
+    document.getElementById('when-onetime').className = 'type-btn' + (type === 'onetime' ? ' active-onetime' : '');
+    document.getElementById('fields-onetime-date').classList.toggle('open', type === 'onetime');
 }
 
 function updatePreview() {
@@ -647,14 +661,16 @@ function renderKpi(section, expenses) {
 }
 
 function getTypeBadge(e) {
-    if (e.percent_of && e.percent_value) {
-        return '<span class="type-badge type-badge--percent">% אחוז</span>';
-    }
+    const isPct = e.percent_of && e.percent_value;
     const isRecurring = e.is_recurring === undefined || e.is_recurring === null || e.is_recurring === 1;
-    if (!isRecurring) {
-        return '<span class="type-badge type-badge--onetime">חד פעמי</span>';
-    }
-    return '<span class="type-badge type-badge--monthly">חודשי</span>';
+    let badges = '';
+    badges += isPct
+        ? '<span class="type-badge type-badge--percent">%</span> '
+        : '<span class="type-badge type-badge--monthly">₪</span> ';
+    badges += isRecurring
+        ? '<span class="type-badge type-badge--monthly">חודשי</span>'
+        : '<span class="type-badge type-badge--onetime">חד פעמי</span>';
+    return badges;
 }
 
 function renderTable(tbody, expenses) {
@@ -743,7 +759,8 @@ function toggleAddPanel() {
     if (panel.classList.contains('open')) {
         document.getElementById('new-category').focus();
     } else {
-        setExpenseType('monthly');
+        setAmountType('fixed');
+        setWhenType('monthly');
     }
 }
 
@@ -754,22 +771,24 @@ async function saveNewExpense() {
 
     let body = { category };
 
-    if (expenseType === 'percent') {
+    // Q1: כמה?
+    if (amountType === 'percent') {
         const pctVal = parseFloat(document.getElementById('new-percent-value').value) || 0;
         const pctOf  = document.getElementById('new-percent-of').value;
         if (pctVal <= 0) { document.getElementById('new-percent-value').focus(); return; }
         body.amount = 0;
         body.percent_of = pctOf;
         body.percent_value = pctVal;
-    } else if (expenseType === 'onetime') {
-        const amt = parseFloat(document.getElementById('new-onetime-amount').value) || 0;
-        const paymentMonth = document.getElementById('new-payment-date').value; // YYYY-MM
-        if (amt <= 0) { document.getElementById('new-onetime-amount').focus(); return; }
+    } else {
+        const amt = parseFloat(document.getElementById('new-amount').value) || 0;
         body.amount = amt;
+    }
+
+    // Q2: מתי?
+    if (whenType === 'onetime') {
+        const paymentMonth = document.getElementById('new-payment-date').value; // YYYY-MM
         body.is_recurring = 0;
         body.payment_date = paymentMonth + '-01';
-    } else {
-        body.amount = parseFloat(document.getElementById('new-amount').value) || 0;
     }
 
     try {
@@ -785,10 +804,10 @@ async function saveNewExpense() {
         // Reset form
         catInput.value = '';
         document.getElementById('new-amount').value = '';
-        document.getElementById('new-onetime-amount').value = '';
         document.getElementById('new-percent-value').value = '';
         document.getElementById('percent-preview').textContent = '';
-        setExpenseType('monthly');
+        setAmountType('fixed');
+        setWhenType('monthly');
         document.getElementById('add-form-card').classList.remove('open');
     } catch (err) {
         console.error(err);

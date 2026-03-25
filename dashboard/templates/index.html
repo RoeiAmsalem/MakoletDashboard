@@ -205,8 +205,8 @@ function renderKpis(section, d) {
                 <span class="kpi-label" id="profit-label">${isCurrentMonth ? (anyEstimated ? 'רווח משוער' : 'רווח חודש שוטף') : profitLabel}</span>
             </div>
             <span class="kpi-value ${profitValClass}" id="profit-value">${formatMoney(d.profit)}</span>
-            ${d.profit_pct !== null ? `<span class="profit-pct-badge ${d.profit >= 0 ? 'positive' : 'negative'}">
-                רווחיות: ${d.profit_pct}%
+            ${d.income > 0 ? `<span class="profit-pct-badge ${d.profit >= 0 ? 'positive' : 'negative'}" id="profit-pct-badge">
+                ריווחיות: ${(d.profit / d.income * 100).toFixed(1)}%
             </span>` : ''}
             <span class="kpi-badge ${badgeClass}" id="profit-badge">${badgeText}</span>
             ${ratioHtml}
@@ -281,6 +281,7 @@ function applyViewMode() {
     const mobOnBg = 'rgba(255,255,255,0.2)'; const mobOnClr = 'white'; const mobOnBdr = 'rgba(255,255,255,0.4)';
     const mobOffBg = 'transparent'; const mobOffClr = '#aaa'; const mobOffBdr = 'rgba(255,255,255,0.1)';
 
+    const pctBadge = document.getElementById('profit-pct-badge');
     if (mode === 'full') {
         fixedVal.textContent = formatMoney(d.fixed_total);
         fixedSub.textContent = '';
@@ -288,6 +289,10 @@ function applyViewMode() {
         profitVal.textContent = formatMoney(fullProfit);
         profitVal.className = 'kpi-value ' + (fullProfit >= 0 ? 'profit' : 'loss');
         profitLbl.textContent = 'רווח חודשי מלא';
+        if (pctBadge && d.income > 0) {
+            pctBadge.textContent = `ריווחיות: ${(fullProfit / d.income * 100).toFixed(1)}%`;
+            pctBadge.className = 'profit-pct-badge ' + (fullProfit >= 0 ? 'positive' : 'negative');
+        }
         btnFull.style.background = onBg;  btnFull.style.color = onClr;
         btnPro.style.background  = offBg; btnPro.style.color  = offClr;
         if (mobFull) { mobFull.style.background = mobOnBg; mobFull.style.color = mobOnClr; mobFull.style.borderColor = mobOnBdr; }
@@ -297,6 +302,10 @@ function applyViewMode() {
         fixedSub.textContent = `יום ${d.days_passed} מתוך ${d.days_in_month}`;
         profitVal.textContent = formatMoney(d.profit);
         profitVal.className = 'kpi-value ' + (d.profit >= 0 ? 'profit' : 'loss');
+        if (pctBadge && d.income > 0) {
+            pctBadge.textContent = `ריווחיות: ${(d.profit / d.income * 100).toFixed(1)}%`;
+            pctBadge.className = 'profit-pct-badge ' + (d.profit >= 0 ? 'positive' : 'negative');
+        }
         const anyEst = !d.is_finalized || d.salary_is_estimated;
         profitLbl.textContent = anyEst ? 'רווח משוער' : 'רווח חודשי';
         btnPro.style.background  = onBg;  btnPro.style.color  = onClr;

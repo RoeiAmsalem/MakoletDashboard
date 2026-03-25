@@ -477,7 +477,6 @@ def api_summary():
     # Recalculate profit with the (possibly estimated) salary
     data["profit"] = data["income"] - data["goods"] - data["fixed_prorated"] - salary
 
-    data["profit_pct"] = round(data["profit"] / data["income"] * 100, 1) if data["income"] and data["income"] > 0 else None
     data["salary_is_estimated"] = salary_is_estimated
     if salary_is_estimated:
         data["salary_estimation_info"] = salary_result

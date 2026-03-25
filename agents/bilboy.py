@@ -152,7 +152,7 @@ class BilBoyAgent(BaseAgent):
             amount = float(doc.get("totalWithVat") or doc.get("totalAmount") or doc.get("amount") or 0)
             total_without_vat = float(doc.get("totalWithoutVat") or 0)
             supplier = doc.get("supplierName") or ""
-            ref_number = str(doc.get("refNumber") or doc.get("number") or "")
+            ref_number = str(doc.get("refNumber") or doc.get("number") or "").lstrip("0") or "0"
             doc_type = doc.get("type")
             doc_type_name = DOC_TYPE_NAMES.get(doc_type, str(doc_type))
             description = supplier or ref_number or "BilBoy document"
@@ -180,10 +180,23 @@ class BilBoyAgent(BaseAgent):
                 }
             )
 
-        if self._skip_zikayon or self._skip_zeros:
+        # Deduplicate within batch (same date + ref_number + doc_type)
+        seen = set()
+        deduped = []
+        self._skip_dupes = 0
+        for r in records:
+            key = (r["date"], r["ref_number"], r["doc_type"])
+            if key in seen:
+                self._skip_dupes += 1
+                continue
+            seen.add(key)
+            deduped.append(r)
+        records = deduped
+
+        if self._skip_zikayon or self._skip_zeros or self._skip_dupes:
             self.logger.info(
-                "[bilboy] Filtered: %d zikayon, %d zero-amount → %d records kept",
-                self._skip_zikayon, self._skip_zeros, len(records),
+                "[bilboy] Filtered: %d zikayon, %d zero-amount, %d batch-dupes → %d records kept",
+                self._skip_zikayon, self._skip_zeros, self._skip_dupes, len(records),
             )
         return records
 
@@ -310,7 +323,7 @@ if __name__ == "__main__":
         from_date = date(today.year, today.month, 1).isoformat()
         to_date = today.isoformat()
         records = agent._fetch_invoices(from_date=from_date, to_date=to_date)
-        total_fetched = len(records) + agent._skip_zikayon + agent._skip_zeros
+        total_fetched = len(records) + agent._skip_zikayon + agent._skip_zeros + agent._skip_dupes
         total_amount = sum(r["amount"] for r in records)
         total_nv = sum(r["total_without_vat"] for r in records)
 
@@ -318,6 +331,7 @@ if __name__ == "__main__":
         print(f"Total fetched from API: {total_fetched}")
         print(f"  would_skip_zikayon:   {agent._skip_zikayon}")
         print(f"  would_skip_zeros:     {agent._skip_zeros}")
+        print(f"  would_skip_dupes:     {agent._skip_dupes}")
         print(f"  would_insert:         {len(records)}")
         print(f"  total (with VAT):     ₪{total_amount:,.2f}")
         print(f"  total (without VAT):  ₪{total_nv:,.2f}")

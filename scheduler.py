@@ -295,14 +295,15 @@ def saturday_reconciliation():
     # Write reconciliation log
     skip_z = getattr(agent, "_skip_zikayon", 0)
     skip_0 = getattr(agent, "_skip_zeros", 0)
-    fetched_total = len(api_records) + skip_z + skip_0
+    skip_d = getattr(agent, "_skip_dupes", 0)
+    fetched_total = len(api_records) + skip_z + skip_0 + skip_d
     month_str = _format_month(today) or today.strftime("%Y-%m")
     log_dir = Path(__file__).parent / "logs"
     log_dir.mkdir(exist_ok=True)
     log_line = (
         f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {month_str} | "
         f"fetched={fetched_total} docs | inserted={inserted_count} docs | "
-        f"skipped_zikayon={skip_z} | skipped_zeros={skip_0} | "
+        f"skipped_zikayon={skip_z} | skipped_zeros={skip_0} | skipped_dupes={skip_d} | "
         f"total=₪{inserted_amount:,.2f}\n"
     )
     with open(log_dir / "bilboy_reconciliation.log", "a", encoding="utf-8") as f:

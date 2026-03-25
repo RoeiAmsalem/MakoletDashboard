@@ -346,6 +346,25 @@ body {
     border: 1px solid rgba(250, 204, 21, 0.3);
 }
 
+.profit-pct-badge {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border-radius: 6px;
+    padding: 2px 8px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+.profit-pct-badge.positive {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.15);
+}
+.profit-pct-badge.negative {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.15);
+}
+
 /* --- Section Title ------------------------------------------- */
 .section-title {
     font-size: 1rem;

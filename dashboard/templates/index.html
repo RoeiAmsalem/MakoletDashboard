@@ -205,6 +205,9 @@ function renderKpis(section, d) {
                 <span class="kpi-label" id="profit-label">${isCurrentMonth ? (anyEstimated ? 'רווח משוער' : 'רווח חודש שוטף') : profitLabel}</span>
             </div>
             <span class="kpi-value ${profitValClass}" id="profit-value">${formatMoney(d.profit)}</span>
+            <span class="profit-pct-badge ${d.profit >= 0 ? 'positive' : 'negative'}">
+                ${d.profit >= 0 ? '▲' : '▼'} ${d.profit_pct !== null ? d.profit_pct + '%' : '–%'}
+            </span>
             <span class="kpi-badge ${badgeClass}" id="profit-badge">${badgeText}</span>
             ${ratioHtml}
         </div>

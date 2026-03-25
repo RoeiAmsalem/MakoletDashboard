@@ -169,14 +169,13 @@ class BilBoyAgent(BaseAgent):
 
     def fetch_data(self) -> list[dict]:
         """
-        Fetch documents for the last 7 days in a single API call.
-        Duplicate detection in save_to_db() ensures only new documents are
-        inserted, so late-arriving docs on days we already have data for
-        are caught automatically.
+        Fetch documents for the full current month.
+        The nightly reconciliation in scheduler.py does a full replace
+        (delete + re-insert) so late-arriving invoices are always caught.
         """
         today = date.today()
-        from_date = (today - timedelta(days=7)).isoformat()
-        to_date = (today - timedelta(days=1)).isoformat()
+        from_date = date(today.year, today.month, 1).isoformat()
+        to_date = today.isoformat()
         records = self._fetch_invoices(from_date=from_date, to_date=to_date)
         self.logger.info("[bilboy] Fetched %d documents for %s to %s",
                          len(records), from_date, to_date)

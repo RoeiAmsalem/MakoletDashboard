@@ -2,10 +2,9 @@
 Nightly scheduler for MakoletDashboard agents.
 
 Schedule (Asia/Jerusalem timezone):
-    02:00 every night — run bilboy + aviv_alerts always,
+    02:00 every night — full-month BilBoy reconciliation + aviv_alerts always,
                         run employee_hours only on days 1-5 of the month
                         AND only if not already finalized for this month.
-    Saturday 02:00    — full-month BilBoy reconciliation (separate job).
 
 On startup: all applicable agents run once immediately for testing.
 """
@@ -159,7 +158,9 @@ def nightly_job():
     logger.info("=== Nightly job started (%s) ===", today.isoformat())
 
     results = {}
-    results["bilboy"] = _run_agent(BilBoyAgent())
+    # Full-month BilBoy reconciliation every night (replaces 7-day backfill)
+    saturday_reconciliation()
+    results["bilboy"] = {"success": True, "data": []}
     results["aviv_alerts"] = _run_agent(AvivAlertsAgent())
 
     # Check for missing Z-reports in the past 7 days
@@ -317,18 +318,7 @@ if __name__ == "__main__":
         name="Nightly agents (02:00 IL)",
         replace_existing=True,
     )
-    scheduler.add_job(
-        saturday_reconciliation,
-        trigger="cron",
-        day_of_week="sat",
-        hour=2,
-        minute=30,
-        id="saturday_reconciliation",
-        name="Saturday BilBoy reconciliation (02:30 IL)",
-        replace_existing=True,
-    )
-
-    logger.info("Scheduler started — nightly 02:00, reconciliation Sat 02:30. Press Ctrl+C to stop.")
+    logger.info("Scheduler started — nightly 02:00 (includes full-month BilBoy reconciliation). Press Ctrl+C to stop.")
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):

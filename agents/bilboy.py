@@ -19,7 +19,8 @@ Auth: Bearer token from BILBOY_TOKEN in .env
 """
 
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
@@ -141,9 +142,11 @@ class BilBoyAgent(BaseAgent):
 
         docs = self._get_doc_headers(branch_id, suppliers_csv,
                                      from_date=from_date, to_date=to_date)
-        self.logger.info("[bilboy] Fetched %d documents", len(docs))
+        self.logger.info("[bilboy] Fetched %d documents from API", len(docs))
 
         records = []
+        self._skip_zikayon = 0
+        self._skip_zeros = 0
         for doc in docs:
             raw_date = doc.get("date") or doc.get("documentDate") or date.today().isoformat()
             amount = float(doc.get("totalWithVat") or doc.get("totalAmount") or doc.get("amount") or 0)
@@ -153,6 +156,17 @@ class BilBoyAgent(BaseAgent):
             doc_type = doc.get("type")
             doc_type_name = DOC_TYPE_NAMES.get(doc_type, str(doc_type))
             description = supplier or ref_number or "BilBoy document"
+
+            # Skip franchise docs
+            if "זיכיונות המכולת" in supplier:
+                self._skip_zikayon += 1
+                continue
+
+            # Skip zero-amount docs (delivery notes with no value)
+            if amount == 0 and total_without_vat == 0:
+                self._skip_zeros += 1
+                continue
+
             records.append(
                 {
                     "date": str(raw_date)[:10],  # ensure YYYY-MM-DD
@@ -164,6 +178,12 @@ class BilBoyAgent(BaseAgent):
                     "doc_type_name": doc_type_name,
                     "raw": doc,
                 }
+            )
+
+        if self._skip_zikayon or self._skip_zeros:
+            self.logger.info(
+                "[bilboy] Filtered: %d zikayon, %d zero-amount → %d records kept",
+                self._skip_zikayon, self._skip_zeros, len(records),
             )
         return records
 
@@ -278,10 +298,51 @@ class BilBoyAgent(BaseAgent):
 
 if __name__ == "__main__":
     import logging
+    import sys
 
     logging.basicConfig(level=logging.INFO)
-    result = BilBoyAgent().run()
-    if result["success"]:
-        print(f"Success: {len(result['data'])} documents saved.")
+    dry_run = "--dry-run" in sys.argv
+
+    if dry_run:
+        print("=== DRY RUN — no DB changes ===\n")
+        agent = BilBoyAgent()
+        today = date.today()
+        from_date = date(today.year, today.month, 1).isoformat()
+        to_date = today.isoformat()
+        records = agent._fetch_invoices(from_date=from_date, to_date=to_date)
+        total_fetched = len(records) + agent._skip_zikayon + agent._skip_zeros
+        total_amount = sum(r["amount"] for r in records)
+        total_nv = sum(r["total_without_vat"] for r in records)
+
+        print(f"Date range: {from_date} to {to_date}")
+        print(f"Total fetched from API: {total_fetched}")
+        print(f"  would_skip_zikayon:   {agent._skip_zikayon}")
+        print(f"  would_skip_zeros:     {agent._skip_zeros}")
+        print(f"  would_insert:         {len(records)}")
+        print(f"  total (with VAT):     ₪{total_amount:,.2f}")
+        print(f"  total (without VAT):  ₪{total_nv:,.2f}")
+        print()
+
+        # Breakdown by doc type
+        by_type: dict[str, list] = {}
+        for r in records:
+            key = r.get("doc_type_name") or str(r.get("doc_type"))
+            by_type.setdefault(key, []).append(r)
+        print("--- BY DOC TYPE ---")
+        for tn, docs in sorted(by_type.items()):
+            t = sum(d["amount"] for d in docs)
+            print(f"  {tn}: {len(docs)} docs, ₪{t:,.2f}")
+
+        # Top 10 suppliers
+        by_sup: dict[str, float] = {}
+        for r in records:
+            by_sup[r["description"]] = by_sup.get(r["description"], 0) + r["amount"]
+        print("\n--- TOP 10 SUPPLIERS ---")
+        for sup, amt in sorted(by_sup.items(), key=lambda x: -x[1])[:10]:
+            print(f"  ₪{amt:>10,.2f}  {sup}")
     else:
-        print(f"Failed: {result['error']}")
+        result = BilBoyAgent().run()
+        if result["success"]:
+            print(f"Success: {len(result['data'])} documents saved.")
+        else:
+            print(f"Failed: {result['error']}")

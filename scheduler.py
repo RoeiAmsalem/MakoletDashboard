@@ -11,7 +11,8 @@ On startup: all applicable agents run once immediately for testing.
 
 import logging
 import time
-from datetime import date
+from datetime import date, datetime
+from pathlib import Path
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
@@ -290,6 +291,23 @@ def saturday_reconciliation():
     msg = "\n".join(lines)
 
     send_alert(msg, force=True)
+
+    # Write reconciliation log
+    skip_z = getattr(agent, "_skip_zikayon", 0)
+    skip_0 = getattr(agent, "_skip_zeros", 0)
+    fetched_total = len(api_records) + skip_z + skip_0
+    month_str = _format_month(today) or today.strftime("%Y-%m")
+    log_dir = Path(__file__).parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_line = (
+        f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {month_str} | "
+        f"fetched={fetched_total} docs | inserted={inserted_count} docs | "
+        f"skipped_zikayon={skip_z} | skipped_zeros={skip_0} | "
+        f"total=₪{inserted_amount:,.2f}\n"
+    )
+    with open(log_dir / "bilboy_reconciliation.log", "a", encoding="utf-8") as f:
+        f.write(log_line)
+
     logger.info(
         "=== Saturday reconciliation complete — %d inserted (was %d) ===",
         inserted_count, old_count,

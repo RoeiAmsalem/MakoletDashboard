@@ -207,6 +207,55 @@ def nightly_job():
 # Saturday reconciliation job
 # ---------------------------------------------------------------------------
 
+def _verify_bilboy_sync(today: date, api_total: float, api_count: int) -> None:
+    """Compare DB goods total against API total after sync. Alert on mismatch."""
+    from_date = date(today.year, today.month, 1).isoformat()
+    to_date = today.isoformat()
+    month_str = today.strftime("%Y-%m")
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) as n, COALESCE(SUM(amount), 0) as total "
+            "FROM expenses WHERE category='goods' AND source='bilboy' "
+            "AND date >= ? AND date <= ?",
+            (from_date, to_date),
+        ).fetchone()
+        db_count = row[0]
+        db_total = row[1]
+
+    diff = round(db_total - api_total, 2)
+    log_dir = Path(__file__).parent / "logs"
+    log_dir.mkdir(exist_ok=True)
+    log_path = log_dir / "bilboy_reconciliation.log"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    if abs(diff) > 10:
+        log_line = (
+            f"❌ MISMATCH {now_str} | month={month_str} | "
+            f"DB=₪{db_total:,.2f} ({db_count} rows) | "
+            f"API=₪{api_total:,.2f} ({api_count} docs) | "
+            f"diff=₪{diff:,.2f}\n"
+        )
+        alert_msg = (
+            f"⚠️ BilBoy sync mismatch for {month_str}!\n"
+            f"DB: ₪{db_total:,.2f} ({db_count} rows)\n"
+            f"BilBoy: ₪{api_total:,.2f} ({api_count} docs)\n"
+            f"Diff: ₪{diff:,.2f}"
+        )
+        logger.error("[verify] %s", log_line.strip())
+        send_alert(alert_msg, force=True)
+    else:
+        log_line = (
+            f"✅ OK {now_str} | month={month_str} | "
+            f"DB=₪{db_total:,.2f} ({db_count} rows) | "
+            f"API=₪{api_total:,.2f} ({api_count} docs)\n"
+        )
+        logger.info("[verify] %s", log_line.strip())
+
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write(log_line)
+
+
 def saturday_reconciliation():
     """
     Full-month BilBoy reconciliation — runs every Saturday.
@@ -313,6 +362,9 @@ def saturday_reconciliation():
         "=== Saturday reconciliation complete — %d inserted (was %d) ===",
         inserted_count, old_count,
     )
+
+    # --- Post-sync verification: compare DB vs what we just inserted from API ---
+    _verify_bilboy_sync(today, api_total=inserted_amount, api_count=inserted_count)
 
 
 # ---------------------------------------------------------------------------

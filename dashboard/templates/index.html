@@ -206,7 +206,7 @@ function renderKpis(section, d) {
             </div>
             <span class="kpi-value ${profitValClass}" id="profit-value">${formatMoney(d.profit)}</span>
             ${d.profit_pct !== null ? `<span class="profit-pct-badge ${d.profit >= 0 ? 'positive' : 'negative'}">
-                ${d.profit >= 0 ? '▲' : '▼'} ${d.profit_pct}%
+                רווחיות: ${d.profit_pct}%
             </span>` : ''}
             <span class="kpi-badge ${badgeClass}" id="profit-badge">${badgeText}</span>
             ${ratioHtml}

@@ -480,8 +480,19 @@ def api_summary():
     data["salary_is_estimated"] = salary_is_estimated
     if salary_is_estimated:
         data["salary_estimation_info"] = salary_result
+        # Compute full-month salary estimate (all working days)
+        info = salary_result
+        if info.get("employees") and info.get("total_working_days"):
+            salary_full = round(sum(
+                e["daily_rate"] * info["total_working_days"]
+                for e in info["employees"]
+            ), 2)
+        else:
+            salary_full = salary
+        data["salary_full"] = salary_full
     else:
         data["salary_estimation_info"] = None
+        data["salary_full"] = salary
 
     # Count unmatched employees (total_salary=0 in employee_monthly_hours)
     from database.db import get_connection

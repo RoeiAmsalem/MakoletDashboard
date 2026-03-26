@@ -241,6 +241,11 @@ python scheduler.py
 ## VPS Deployment
 
 - **OS:** Ubuntu 22.04
-- **הרצה רציפה:** systemd service או `screen`
+- **הרצה רציפה:** systemd services (`makolet` + `makolet-scheduler`)
 - **לוגים:** `/var/log/makolet/`
 - **גיבוי DB:** cron job יומי ל-backup של `makolet.db`
+
+**Deploy command (always restart BOTH services):**
+```bash
+ssh makolet "cd /opt/makolet-dashboard && git pull origin main && systemctl restart makolet && systemctl restart makolet-scheduler"
+```

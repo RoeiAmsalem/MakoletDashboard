@@ -155,6 +155,13 @@ def save(data: dict):
 
 def run_aviv_live():
     """Entry point for scheduler — init table, scrape, save."""
+    import pytz
+    il_tz = pytz.timezone('Asia/Jerusalem')
+    now = datetime.now(il_tz)
+    start = now.replace(hour=6, minute=30, second=0, microsecond=0)
+    end = now.replace(hour=23, minute=5, second=0, microsecond=0)
+    if not (start <= now <= end):
+        return  # outside store hours, skip silently
     try:
         init_live_sales_table()
         data = scrape()

@@ -472,6 +472,27 @@ def api_summary():
     salary_is_estimated = salary_result["is_estimated"]
 
     data = calculate_estimated_profit(selected.month, selected.year)
+
+    # If viewing current month and today has no Z-report, add live sales to income
+    today = date.today()
+    live_amount_today = 0
+    if selected.year == today.year and selected.month == today.month:
+        from database.db import get_connection as _gc
+        with _gc() as conn:
+            has_z = conn.execute(
+                "SELECT COUNT(*) FROM daily_sales WHERE date = ?",
+                (today.isoformat(),),
+            ).fetchone()[0]
+            if not has_z:
+                live_row = conn.execute(
+                    "SELECT amount FROM live_sales WHERE date = ?",
+                    (today.isoformat(),),
+                ).fetchone()
+                if live_row and live_row[0]:
+                    live_amount_today = live_row[0]
+    data["income"] += live_amount_today
+    data["live_amount_today"] = live_amount_today
+
     # Override salary with our estimated value
     data["salary"] = salary
     # Recalculate profit with the (possibly estimated) salary

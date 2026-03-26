@@ -228,7 +228,8 @@ function renderKpis(section, d) {
                 <span class="kpi-icon">📈</span>
                 <span class="kpi-label">הכנסות</span>
             </div>
-            <span class="kpi-value profit">${formatMoney(d.income)}</span>
+            <span class="kpi-value profit" id="income-value">${formatMoney(d.income)}</span>
+            ${d.live_amount_today > 0 ? `<span style="font-size:0.72rem;color:rgba(241,245,249,0.5);margin-top:0.15rem">כולל ₪${Math.round(d.live_amount_today).toLocaleString('he-IL')} מהיום (לייב)</span>` : ''}
         </div>
 
         <div class="kpi-card kpi-card--goods" style="cursor:pointer" onclick="location.href='/goods'">
@@ -336,6 +337,32 @@ function applyViewMode() {
         btnFull.style.background = offBg; btnFull.style.color = offClr;
         if (mobPro)  { mobPro.style.background  = mobOnBg; mobPro.style.color  = mobOnClr; mobPro.style.borderColor  = mobOnBdr; }
         if (mobFull) { mobFull.style.background = mobOffBg; mobFull.style.color = mobOffClr; mobFull.style.borderColor = mobOffBdr; }
+    }
+}
+
+// ── Refresh income + profit from live data (called by charts.js every 5min) ──
+async function refreshSummaryTiles() {
+    try {
+        const res = await fetch(`/api/summary?month=${SELECTED_MONTH}`);
+        if (!res.ok) return;
+        const d = await res.json();
+        _summaryData = d;
+
+        // Update income tile
+        const incomeVal = document.getElementById('income-value');
+        if (incomeVal) incomeVal.textContent = formatMoney(d.income);
+
+        // Update salary tile
+        const salaryVal = document.getElementById('salary-value');
+        if (salaryVal) {
+            const mode = localStorage.getItem('view_mode') || 'prorated';
+            salaryVal.textContent = formatMoney(mode === 'full' ? (d.salary_full || d.salary) : d.salary);
+        }
+
+        // Reapply view mode to update profit + fixed with new data
+        applyViewMode();
+    } catch (e) {
+        console.error('refreshSummaryTiles:', e);
     }
 }
 

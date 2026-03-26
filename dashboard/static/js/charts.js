@@ -126,6 +126,8 @@ function loadLiveSales() {
                 document.getElementById('live-sub').textContent = '';
                 document.getElementById('live-updated').textContent = '';
             }
+            // Refresh income + profit tiles with latest live data
+            if (typeof refreshSummaryTiles === 'function') refreshSummaryTiles();
         })
         .catch(() => {
             document.getElementById('live-amount').textContent = 'שגיאה';

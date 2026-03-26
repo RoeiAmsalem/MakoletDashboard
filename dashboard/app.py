@@ -494,6 +494,24 @@ def api_summary():
     return jsonify(data)
 
 
+@app.route("/api/live-sales")
+@login_required
+def api_live_sales():
+    """Return latest Aviv live sales data."""
+    from database.db import get_connection
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT date, amount, transactions, last_updated, fetched_at "
+            "FROM live_sales ORDER BY date DESC LIMIT 1"
+        ).fetchone()
+    if row:
+        return jsonify({
+            "date": row[0], "amount": row[1], "transactions": row[2],
+            "last_updated": row[3], "fetched_at": row[4],
+        })
+    return jsonify({"amount": None, "transactions": None})
+
+
 @app.route("/api/fixed-expenses", methods=["GET"])
 @login_required
 def api_fixed_expenses_list():

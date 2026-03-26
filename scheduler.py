@@ -18,6 +18,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 
 from agents.bilboy import BilBoyAgent
 from agents.aviv_alerts import AvivAlertsAgent, check_missing_z_reports
+from agents.aviv_live import run_aviv_live, init_live_sales_table
 from agents.employee_hours import EmployeeHoursAgent
 from database.db import init_db, get_connection, get_total_income, get_total_expenses_by_category
 from notifications.whatsapp import send_alert
@@ -373,11 +374,13 @@ def saturday_reconciliation():
 
 if __name__ == "__main__":
     init_db()
+    init_live_sales_table()
     logger.info("Database initialised.")
 
     # Run immediately on startup so we can verify everything works
     logger.info("Running startup pass of all agents...")
     nightly_job()
+    run_aviv_live()
 
     scheduler = BlockingScheduler(timezone="Asia/Jerusalem")
     scheduler.add_job(
@@ -389,7 +392,15 @@ if __name__ == "__main__":
         name="Nightly agents (02:00 IL)",
         replace_existing=True,
     )
-    logger.info("Scheduler started — nightly 02:00 (includes full-month BilBoy reconciliation). Press Ctrl+C to stop.")
+    scheduler.add_job(
+        run_aviv_live,
+        trigger="interval",
+        minutes=5,
+        id="aviv_live",
+        name="Aviv live sales (every 5min)",
+        replace_existing=True,
+    )
+    logger.info("Scheduler started — nightly 02:00, aviv_live every 5min. Press Ctrl+C to stop.")
     try:
         scheduler.start()
     except (KeyboardInterrupt, SystemExit):

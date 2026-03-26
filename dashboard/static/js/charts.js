@@ -105,3 +105,32 @@ function buildProfitBarChart(canvasId, labels, values) {
         },
     });
 }
+
+// ── Live Sales Tile ──────────────────────────────────────────
+function loadLiveSales() {
+    fetch('/api/live-sales')
+        .then(r => r.json())
+        .then(d => {
+            if (d.amount !== null && d.amount !== undefined) {
+                document.getElementById('live-amount').textContent =
+                    '₪ ' + d.amount.toLocaleString('he-IL', {minimumFractionDigits: 0});
+                document.getElementById('live-amount').className = 'kpi-value profit';
+                document.getElementById('live-sub').textContent =
+                    (d.transactions || 0) + ' עסקאות';
+                const timeOnly = d.last_updated ? d.last_updated.split(' ')[0] : '';
+                document.getElementById('live-updated').textContent =
+                    timeOnly ? 'עודכן: ' + timeOnly : '';
+            } else {
+                document.getElementById('live-amount').textContent = 'אין נתונים';
+                document.getElementById('live-amount').className = 'kpi-value';
+                document.getElementById('live-sub').textContent = '';
+                document.getElementById('live-updated').textContent = '';
+            }
+        })
+        .catch(() => {
+            document.getElementById('live-amount').textContent = 'שגיאה';
+        });
+}
+
+// First call triggered from index.html after renderKpis(). Auto-refresh every 5min.
+setInterval(loadLiveSales, 300000);
